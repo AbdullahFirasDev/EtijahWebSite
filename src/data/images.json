@@ -1,0 +1,101 @@
+{
+  "cta-sky": {
+    "width": 2400,
+    "height": 3600,
+    "widths": [
+      640,
+      960,
+      1280,
+      1920
+    ],
+    "blur": "data:image/webp;base64,UklGRtgAAABXRUJQVlA4IMwAAAAQBgCdASoYACQAPulgqE2pJaQiNVgIASAdCWoAsQ1tAfsO1lgywUxXpaFjFW94InwEfQxi6Wls2IAA/pgto/iKQxkqo16k7I+hLd0bkbZ9pxE93opaK/U3GSQUhxkT1yUaJDYYTjWguefdLF4yGkCbWFEvUomBG/pLAAATTcD0EcHhVFLaPX74FagEfdtu7HhcL40fXfFbgcPcRiHfMKm7kqRKkfsSxLl0nv4UW2ATS6u7fGK/qbR1mFzAGOHQDcyD9HeIy6WYLKxiMAA="
+  },
+  "dest-dubai": {
+    "width": 1800,
+    "height": 2700,
+    "widths": [
+      480,
+      768,
+      1080,
+      1440
+    ],
+    "blur": "data:image/webp;base64,UklGRvYAAABXRUJQVlA4IOoAAACQBgCdASoYACQAPu1urVIppiQipWsxMB2JZgCdM5ykkBDFkvtyCqrx7Nq59/CZNb47wJNpPIlnYKKvjKwAAP3alSdUSm66JAdNyGy11BOH4gtkS9ff7RNyOupa7sV4BapLlAMnLwVuHISp+Wmi4fL3Nw8sggYJnWqdzKATc0Yfce6ckBMSEjnXtAWyWgjXXQv/8jaYcsfXgd8/awO7xuIgcm8PTDwMVtCLqkhSB2KsNt60TsXK5i8JUdVMVEIggC2pKBjTSfBy7TLT0osMIZ/bd/HAyeUxwEvYe7fKhNp/9TXx4uW+UayQAAA="
+  },
+  "dest-giza": {
+    "width": 1800,
+    "height": 1200,
+    "widths": [
+      480,
+      768,
+      1080,
+      1440
+    ],
+    "blur": "data:image/webp;base64,UklGRpAAAABXRUJQVlA4IIQAAADQBACdASoYABAAPu1iqU2ppaOiMAgBMB2JZgCsIDhyAAsqEmbdk/vqv0rUdr1JAAD+7VB1b9Yrh8z6S3v9K/9LmAJTGJpsQtzyOg3Rva9Ab2T8wFaba5B6qvS8yg7fFH29tLy3RDoUfc1uPenBzNQ8n3ZYrS2LT5Jxrx6DSdQqs4YAAAA="
+  },
+  "dest-istanbul": {
+    "width": 1800,
+    "height": 1200,
+    "widths": [
+      480,
+      768,
+      1080,
+      1440
+    ],
+    "blur": "data:image/webp;base64,UklGRooAAABXRUJQVlA4IH4AAADwAwCdASoYABAAPu1iqU2ppaOiMAgBMB2JQBWAAhiGyB33qvCUFapAAP3Op3DOILML/LgSV0QiWOEFmVTT5OiXG/jvKNpw1EKKQUKKF69CBoAEAywkxwY2cNhqkcuxNlL60XaYNjp0enSVDl+HBdlNlWIrp/4CkDpGBpMAAAA="
+  },
+  "dest-kuala-lumpur": {
+    "width": 1800,
+    "height": 1209,
+    "widths": [
+      480,
+      768,
+      1080,
+      1440
+    ],
+    "blur": "data:image/webp;base64,UklGRo4AAABXRUJQVlA4IIIAAAAQBACdASoYABAAPu1iqU2ppaOiMAgBMB2JZACdL1yBIuuCnus9VMFIwAD3BNgZ6ptL1MEGbf1PzLUAosTzVjZVYko5wM33IvBedXto/VgU5ZYMc47G/t/Uy0Mkz6yY7rznBcCgDen37DgRJK+v4pTjJfmQwHfJ9O0dRZdYTrVWCAAA"
+  },
+  "dest-maldives": {
+    "width": 1800,
+    "height": 2250,
+    "widths": [
+      480,
+      768,
+      1080,
+      1440
+    ],
+    "blur": "data:image/webp;base64,UklGRtwAAABXRUJQVlA4INAAAABQBQCdASoYAB4APu1qrlCppaQiqAqpMB2JbACdMuN00D78LxPLJlVCH4VVmTmvgJQwVuwA3hP0tlEb4rMG2bRDhTtOzurC8MKgKF7mRVgPlxa+v/AGmINJiBWUnfkk72+of/his4R/0a0vNDatifRCmflwEJXpojhzDSJuoJYGmHR5HeRsMs9Ta9RB/QuwTBQkdZtE4yf76GhWHWgyu9IDAzyg7tp4J0B9xy7NkiTbD41FVIT9wLGRr/NG1g+wpnDwGWIRW0ES4X6E+ak4OIAA"
+  },
+  "dest-tbilisi": {
+    "width": 1800,
+    "height": 1091,
+    "widths": [
+      480,
+      768,
+      1080,
+      1440
+    ],
+    "blur": "data:image/webp;base64,UklGRpYAAABXRUJQVlA4IIoAAABQBACdASoYAA8APu1iqU2ppaOiMAgBMB2JbACdL1BKgBXzh0JeDyGKAe9gAP3jEqh7EiOOzdzQyKNMwvgeNXXAv2AuUhn8eEUGNUayNcGsLXrPYrjihphEcm6pHPcQk9zhDVVMlpX7KpDFUWpiQIK3vRYSaUTEQZ12+jeSQjs9em/iguN0/MAAAAA="
+  },
+  "hero-wing": {
+    "width": 2880,
+    "height": 1913,
+    "widths": [
+      640,
+      960,
+      1280,
+      1920,
+      2560
+    ],
+    "blur": "data:image/webp;base64,UklGRpQAAABXRUJQVlA4IIgAAACQBACdASoYABAAPu1iqU2ppaOiMAgBMB2JZACdMoMljDvYqM2fIzBKxIs9+kAA4Q05OalOodxT9kX8AOfTvz7pq1Q8jYF9H3+hE3YWszxYj5j/ZE/oGDY0CF231bwN+zcc1F/rwtU1ZgO87I5Mt0wEDZaWQeTGBoa3UZCLOxa9/G9MU72fNEAA"
+  },
+  "why-traveler": {
+    "width": 1800,
+    "height": 1200,
+    "widths": [
+      480,
+      768,
+      1080
+    ],
+    "blur": "data:image/webp;base64,UklGRqQAAABXRUJQVlA4IJgAAACQBACdASoYABAAPu1kqU2ppaOiMAgBMB2JZgC/OYwSyUpy88rY4e6QOx485boA9rS9c16ChpeAe7KDmki7KChB4eLP4bdq9wAPwxLTQ4TOgmvAgCsftqAWLwyWK4bmvhXTEZ8rlhQCIYKYWs+vqVn8NNuImZarFml8MhdUUcLV9eCV6CH+1WnbwORZHlM17rrZVaR2BWsAAA=="
+  }
+}
