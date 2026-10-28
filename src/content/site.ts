@@ -23,7 +23,7 @@ export const site = {
   email: null as string | null,
 
   address: {
-    streetAr: "شارع الغدير كرامة، بجانب مصرف الخليج",
+    streetAr: "شارع الغدير كرامة، مجاور مصرف الخليج",
     cityAr: "النجف الأشرف",
     streetEn: "Ghadeer Karamah Street, next to Gulf Bank",
     cityEn: "Najaf",
