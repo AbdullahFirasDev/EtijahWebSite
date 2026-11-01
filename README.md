@@ -32,7 +32,8 @@ npm start            # preview out/ at http://127.0.0.1:3000
 
 | What | Where |
 | --- | --- |
-| Phone, WhatsApp, address, map pin, email, domain | `src/content/site.ts` |
+| Phone numbers, WhatsApp, social links, address, map pin, email, domain | `src/content/site.ts` |
+| Partner logos (names, order, optical size tweaks) | `src/content/partners.ts` |
 | Arabic copy | `src/content/ar.ts` |
 | English copy | `src/content/en.ts` |
 | Brand colours & typography tokens | `src/app/globals.css` (`@theme`) |
@@ -50,8 +51,11 @@ Source files live in `assets/`; generated files are committed.
 | `npm run globe` | Land-dot data for the 3D globe + its static fallback image |
 | `npm run icons` | Favicon, Apple touch icon, PWA icons and `public/brand/etijah-mark.svg` from the logo symbol |
 | `npm run og` | Open Graph share images (`public/og/`), rendered in Edge/Chrome |
+| `npm run partners` | Partner logos in `assets/partners/` → trimmed, white background removed, normalised WebP in `public/partners/` + `src/data/partners.json` |
 
 To swap a photo, replace the file in `assets/images/` (keep the name) and run `npm run images`.
+
+To add a partner, put its logo (PNG, WebP or SVG) in `assets/partners/`, run `npm run partners`, and add an entry to `src/content/partners.ts` using the file name.
 
 ## How the site works
 
@@ -60,7 +64,8 @@ To swap a photo, replace the file in `assets/images/` (keep the name) and run `n
   - **Hero entrance:** pure CSS, so content never waits for JavaScript.
   - **GSAP:** drives the plane/contrail loop, scroll reveals, parallax and the "How it works" flight path.
   - **Lenis:** smooth wheel scrolling on desktop pointers only, synced to ScrollTrigger.
-  - **Reduced motion:** with `prefers-reduced-motion`, everything is static and fully visible.
+  - **Partners slider:** two infinite rows in opposite directions, driven by the GSAP ticker. They speed up with scrolling and follow its direction, ease to a stop under the mouse, and can be dragged or flicked. A pause button stops all automatic motion (WCAG 2.2.2), and the slider only runs while it is on screen. Every card has the same size, and logos share a target area so wide and compact logos look equally heavy.
+  - **Reduced motion:** with `prefers-reduced-motion`, everything is static and fully visible; the partners slider becomes a centred grid.
 - **3D globe:** Three.js is lazy-loaded only on capable, larger screens (not with reduced motion, Save-Data, low memory, or missing WebGL), renders only while visible, and is disposed on unmount. Everyone else sees a matching pre-rendered image.
 - **SEO:**
   - Arabic and English metadata, Open Graph/Twitter tags.
@@ -89,6 +94,6 @@ Screenshots are written to `.smoke/`.
 - **Domain:** `etijah.net` is registered (GoDaddy, renews 2027-10) but its nameservers don't answer. Once the site is live, set `NEXT_PUBLIC_SITE_URL`.
 - **Name order:** the brief says «الاتجاه للسياحة والسفر», while the logo and the Google Maps listing say «للسفر والسياحة». The logo lockup follows the logo; site copy follows the brief.
 - **Street name:** please confirm the Arabic spelling «شارع الغدير كرامة» (`site.address.streetAr`).
-- **Not shown on purpose:** opening hours, social accounts, prices, statistics and testimonials (none were provided). Add them only when verified.
+- **Not shown on purpose:** opening hours, prices, statistics and testimonials (none were provided). Add them only when verified.
 - **Photography:** destination and hero photos are from Unsplash (free licence, credited in the footer). Replace them with the company's own photos when available.
 - **Logo source:** the website symbol was vectorised from the supplied logo (`assets/brand/`). If an original vector file (AI/SVG/PDF) exists, replace `src/components/brand/etijah-mark.ts` with its paths and rerun `npm run icons && npm run og`.

@@ -11,6 +11,12 @@ export const site = {
     display: "+964 782 688 8850",
   },
 
+  /** Second phone line (calls only; WhatsApp stays on the main number). */
+  phoneAlt: {
+    e164: "+9647716666150",
+    display: "+964 771 666 6150",
+  },
+
   whatsapp: {
     number: "9647826888850",
   },
@@ -30,6 +36,13 @@ export const site = {
     regionAr: "محافظة النجف",
     regionEn: "Najaf Governorate",
     countryCode: "IQ",
+  },
+
+  social: {
+    handle: "@aletijah",
+    instagram: "https://www.instagram.com/aletijah",
+    tiktok: "https://www.tiktok.com/@aletijah",
+    facebook: "https://www.facebook.com/share/1dGfGm6rb3/",
   },
 
   maps: {
@@ -58,3 +71,6 @@ export function whatsappUrl(text?: string) {
 }
 
 export const telUrl = `tel:${site.phone.e164}`;
+export const telAltUrl = `tel:${site.phoneAlt.e164}`;
+
+export type SocialNetwork = "instagram" | "tiktok" | "facebook";

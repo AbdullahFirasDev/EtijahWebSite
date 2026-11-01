@@ -1,9 +1,10 @@
-import { Mail, MapPin, Phone } from "lucide-react";
+import { AtSign, Mail, MapPin, Phone, PhoneCall } from "lucide-react";
 import type { ReactNode } from "react";
 import { Reveal } from "@/components/motion/Reveal";
 import { WhatsAppIcon } from "@/components/ui/icons";
 import { SectionHeading } from "@/components/ui/SectionHeading";
-import { site, telUrl, whatsappUrl } from "@/content/site";
+import { SocialLinks } from "@/components/ui/SocialLinks";
+import { site, telAltUrl, telUrl, whatsappUrl } from "@/content/site";
 import type { Dictionary } from "@/content/types";
 import { BookingForm } from "./BookingForm";
 import { MapEmbed } from "./MapEmbed";
@@ -71,6 +72,18 @@ export function Contact({ dict }: { dict: Dictionary }) {
                 newTabHint={hint}
               />
               <Channel
+                href={telAltUrl}
+                icon={<PhoneCall className="size-6" strokeWidth={1.8} aria-hidden="true" />}
+                label={contact.phoneAltLabel}
+                value={
+                  <span dir="ltr" className="num">
+                    {site.phoneAlt.display}
+                  </span>
+                }
+                action={contact.phoneAction}
+                newTabHint={hint}
+              />
+              <Channel
                 href={whatsappUrl(dict.general.whatsappText)}
                 icon={<WhatsAppIcon className="size-6" />}
                 label={contact.whatsappLabel}
@@ -108,6 +121,22 @@ export function Contact({ dict }: { dict: Dictionary }) {
                 />
               ) : null}
             </ul>
+            <div data-reveal className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-white p-4 shadow-soft sm:p-5">
+              <div className="flex min-w-0 items-center gap-4">
+                <span className="grid size-13 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                  <AtSign className="size-6" strokeWidth={1.8} aria-hidden="true" />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span id="contact-social" className="text-sm font-semibold text-muted">
+                    {dict.social.title}
+                  </span>
+                  <span className="mt-0.5 text-[1.05rem] font-bold text-brand-950">
+                    <span dir="ltr">{site.social.handle}</span>
+                  </span>
+                </span>
+              </div>
+              <SocialLinks dict={dict} labelledBy="contact-social" />
+            </div>
             <div data-reveal>
               <MapEmbed dict={dict} />
             </div>

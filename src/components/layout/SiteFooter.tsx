@@ -1,10 +1,11 @@
 import { ArrowUp, MapPin, Phone } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { WhatsAppIcon } from "@/components/ui/icons";
-import { site, telUrl, whatsappUrl } from "@/content/site";
+import { SocialLinks } from "@/components/ui/SocialLinks";
+import { site, telAltUrl, telUrl, whatsappUrl } from "@/content/site";
 import type { Dictionary, NavKey } from "@/content/types";
 
-const NAV_ORDER: NavKey[] = ["services", "why", "destinations", "process", "about", "contact"];
+const NAV_ORDER: NavKey[] = ["services", "why", "partners", "destinations", "process", "about", "contact"];
 
 export function SiteFooter({ dict }: { dict: Dictionary }) {
   const { footer, nav, contact } = dict;
@@ -22,16 +23,19 @@ export function SiteFooter({ dict }: { dict: Dictionary }) {
             <Logo locale={dict.locale} tone="dark" idSuffix="footer" badgeClassName="size-13" />
           </a>
           <p className="mt-6 max-w-sm leading-[1.95] text-white/70">{footer.about}</p>
-          <a
-            href={whatsappUrl(dict.general.whatsappText)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-7 inline-flex h-11 items-center gap-2 rounded-full bg-accent-500 px-5 font-bold text-brand-950 transition-colors hover:bg-accent-400"
-          >
-            <WhatsAppIcon className="size-5" />
-            {nav.cta}
-            <span className="sr-only">{dict.general.opensInNewTab}</span>
-          </a>
+          <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-5">
+            <a
+              href={whatsappUrl(dict.general.whatsappText)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent-500 px-5 font-bold text-brand-950 transition-colors hover:bg-accent-400"
+            >
+              <WhatsAppIcon className="size-5" />
+              {nav.cta}
+              <span className="sr-only">{dict.general.opensInNewTab}</span>
+            </a>
+            <SocialLinks dict={dict} tone="dark" />
+          </div>
         </div>
 
         <nav aria-labelledby="footer-nav" className="lg:col-span-2">
@@ -70,6 +74,14 @@ export function SiteFooter({ dict }: { dict: Dictionary }) {
                 <Phone className="size-5 shrink-0 text-accent-400" strokeWidth={1.8} aria-hidden="true" />
                 <span dir="ltr" className="num">
                   {site.phone.display}
+                </span>
+              </a>
+            </li>
+            <li>
+              <a href={telAltUrl} className={`flex items-center gap-3 ${linkClass}`}>
+                <Phone className="size-5 shrink-0 text-accent-400" strokeWidth={1.8} aria-hidden="true" />
+                <span dir="ltr" className="num">
+                  {site.phoneAlt.display}
                 </span>
               </a>
             </li>

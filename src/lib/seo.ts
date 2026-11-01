@@ -74,6 +74,7 @@ export function travelAgencyJsonLd(dict: Dictionary) {
     },
     geo: { "@type": "GeoCoordinates", latitude: site.maps.lat, longitude: site.maps.lng },
     hasMap: site.maps.url,
+    sameAs: [site.social.instagram, site.social.tiktok, site.social.facebook],
     areaServed: { "@type": "Country", name: ar ? "العراق" : "Iraq" },
     hasOfferCatalog: {
       "@type": "OfferCatalog",

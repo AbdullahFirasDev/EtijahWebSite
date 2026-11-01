@@ -1,0 +1,54 @@
+{
+  "air-arabia": {
+    "width": 420,
+    "height": 155
+  },
+  "ajet": {
+    "width": 420,
+    "height": 149
+  },
+  "emirates": {
+    "width": 243,
+    "height": 168
+  },
+  "fly-baghdad": {
+    "width": 420,
+    "height": 124
+  },
+  "fly-cham": {
+    "width": 420,
+    "height": 152
+  },
+  "flydubai": {
+    "width": 420,
+    "height": 86
+  },
+  "global-aviation": {
+    "width": 420,
+    "height": 147
+  },
+  "qatar-airways": {
+    "width": 420,
+    "height": 141
+  },
+  "royal-jordanian": {
+    "width": 420,
+    "height": 97
+  },
+  "sabre": {
+    "width": 420,
+    "height": 102
+  },
+  "salamair": {
+    "width": 420,
+    "height": 79
+  },
+  "turkish-airlines": {
+    "width": 420,
+    "height": 113
+  },
+  "ur-airlines": {
+    "width": 420,
+    "height": 118
+  }
+}

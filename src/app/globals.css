@@ -56,6 +56,7 @@
 
   --animate-pulse-ring: pulse-ring 2.6s var(--ease-out-expo) infinite;
   --animate-float: float 7s ease-in-out infinite;
+  --animate-logo-sheen: logo-sheen 0.95s var(--ease-in-out-quart);
 
   @keyframes pulse-ring {
     0% { transform: scale(1); opacity: 0.55; }
@@ -64,6 +65,11 @@
   @keyframes float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-8px); }
+  }
+  /* Light sweep across a partner logo card (starts and ends outside the card). */
+  @keyframes logo-sheen {
+    from { transform: translateX(0) skewX(-18deg); }
+    to { transform: translateX(340%) skewX(-18deg); }
   }
 }
 

@@ -10,8 +10,11 @@ const root = path.resolve(import.meta.dirname, "..");
 const shotDir = path.resolve(process.argv[2] ?? path.join(root, ".smoke"));
 const channel = process.env.BROWSER_CHANNEL ?? "msedge";
 const PHONE = "+9647826888850";
+const PHONE_ALT = "+9647716666150";
 const WA = "https://wa.me/9647826888850";
 const MAPS = "https://maps.app.goo.gl/kWzQFMfET6hf8VXE9";
+const SOCIAL = ["https://www.instagram.com/aletijah", "https://www.tiktok.com/@aletijah", "https://www.facebook.com/share/1dGfGm6rb3/"];
+const PARTNERS = 13;
 
 await mkdir(shotDir, { recursive: true });
 const server = await serveStatic(path.join(root, "out"));
@@ -77,10 +80,11 @@ for (const [route, lang, dir] of [["/", "ar", "rtl"], ["/en/", "en", "ltr"]]) {
   const tel = links.filter((h) => h.startsWith("tel:"));
   const wa = links.filter((h) => h.includes("wa.me"));
   const maps = links.filter((h) => h.includes("maps."));
-  check(`[${tag}] tel: links correct`, tel.length >= 3 && tel.every((h) => h === `tel:${PHONE}`), `${tel.length} links`);
+  check(`[${tag}] tel: links correct`, tel.length >= 3 && tel.every((h) => h === `tel:${PHONE}` || h === `tel:${PHONE_ALT}`) && tel.includes(`tel:${PHONE_ALT}`), `${tel.length} links`);
   check(`[${tag}] WhatsApp links correct`, wa.length >= 10 && wa.every((h) => h.startsWith(WA)), `${wa.length} links`);
   check(`[${tag}] per-service prefilled WhatsApp`, (await page.locator("#services a[href*='wa.me']").count()) === 6);
   check(`[${tag}] maps links correct`, maps.length >= 3 && maps.every((h) => h === MAPS), `${maps.length} links`);
+  check(`[${tag}] social links (Instagram, TikTok, Facebook)`, SOCIAL.every((url) => links.filter((h) => h === url).length >= 2));
   check(`[${tag}] no unverified email shown`, !links.some((h) => h.startsWith("mailto:")));
   check(`[${tag}] external links are safe`, await page.evaluate(() => [...document.querySelectorAll('a[target="_blank"]')].every((a) => a.rel.includes("noopener"))));
 
@@ -89,6 +93,23 @@ for (const [route, lang, dir] of [["/", "ar", "rtl"], ["/en/", "en", "ltr"]]) {
   await sleep(2200);
   const anchor = await page.evaluate(() => ({ hash: location.hash, top: document.getElementById("process").getBoundingClientRect().top }));
   check(`[${tag}] nav anchor scrolls to section`, anchor.hash === "#process" && anchor.top > -4 && anchor.top < 120, JSON.stringify(anchor));
+
+  // Partners slider: each logo named once, rows glide, and the pause button stops them.
+  await page.locator("#partners").scrollIntoViewIfNeeded();
+  await sleep(1800);
+  const lanes = () => page.evaluate(() => [...document.querySelectorAll("#partners [data-track]")].map((t) => t.style.transform));
+  const named = await page.locator('#partners img:not([alt=""])').count();
+  check(`[${tag}] partners: ${PARTNERS} named logos`, named === PARTNERS, `${named}`);
+  const before = await lanes();
+  await sleep(500);
+  const after = await lanes();
+  check(`[${tag}] partners: rows glide`, before.length === 2 && before.every((v, i) => v && v !== after[i]), JSON.stringify([before, after]));
+  await page.click("#partners button");
+  await sleep(1500);
+  const stopped = await lanes();
+  await sleep(500);
+  check(`[${tag}] partners: pause stops motion`, stopped.join() === (await lanes()).join(), JSON.stringify(stopped));
+  await page.click("#partners button");
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await scrollThrough(page);
@@ -183,6 +204,13 @@ for (const route of ["/", "/en/"]) {
   await page.locator("#about").scrollIntoViewIfNeeded();
   await sleep(1200);
   check("[reduced-motion] static globe fallback", (await page.locator("#about canvas").count()) === 0);
+  const partners = await page.evaluate(() => ({
+    named: document.querySelectorAll('#partners img:not([alt=""])').length,
+    duplicatesShown: [...document.querySelectorAll("#partners [data-duplicate]")].filter((li) => getComputedStyle(li).display !== "none").length,
+    moved: [...document.querySelectorAll("#partners [data-track]")].filter((t) => t.style.transform).length,
+    pauseHidden: getComputedStyle(document.querySelector("#partners button")).display === "none",
+  }));
+  check("[reduced-motion] partners shown as a static grid", partners.named === PARTNERS &&!partners.duplicatesShown && !partners.moved && partners.pauseHidden, JSON.stringify(partners));
   const steps = await page.locator("[data-step][data-active]").count();
   check("[reduced-motion] process steps shown complete", steps === 4, `${steps} active`);
   check("[reduced-motion] no console errors", problems.length === 0, problems.slice(0, 6).join(" | "));

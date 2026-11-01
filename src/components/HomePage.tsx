@@ -7,6 +7,7 @@ import { Contact } from "@/components/sections/Contact";
 import { Destinations } from "@/components/sections/Destinations";
 import { FinalCta } from "@/components/sections/FinalCta";
 import { Hero } from "@/components/sections/Hero";
+import { Partners } from "@/components/sections/Partners";
 import { Process } from "@/components/sections/Process";
 import { Services } from "@/components/sections/Services";
 import { WhyEtijah } from "@/components/sections/WhyEtijah";
@@ -23,6 +24,7 @@ export function HomePage({ dict }: { dict: Dictionary }) {
         <Hero dict={dict} />
         <Services dict={dict} />
         <WhyEtijah dict={dict} />
+        <Partners dict={dict} />
         <Destinations dict={dict} />
         <Process dict={dict} />
         <About dict={dict} />

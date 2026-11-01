@@ -1,6 +1,6 @@
-import type { DestinationId, Locale, ServiceId } from "./site";
+import type { DestinationId, Locale, ServiceId, SocialNetwork } from "./site";
 
-export type NavKey = "services" | "why" | "destinations" | "process" | "about" | "contact";
+export type NavKey = "services" | "why" | "partners" | "destinations" | "process" | "about" | "contact";
 
 export interface Dictionary {
   locale: Locale;
@@ -53,6 +53,13 @@ export interface Dictionary {
     badgeText: string;
     items: { title: string; text: string }[];
   };
+  partners: {
+    eyebrow: string;
+    title: string;
+    lead: string;
+    pause: string;
+    play: string;
+  };
   destinations: {
     eyebrow: string;
     title: string;
@@ -83,6 +90,7 @@ export interface Dictionary {
     lead: string;
     phoneLabel: string;
     phoneAction: string;
+    phoneAltLabel: string;
     whatsappLabel: string;
     whatsappValue: string;
     whatsappAction: string;
@@ -144,6 +152,10 @@ export interface Dictionary {
     whatsapp: string;
     call: string;
     whatsappText: string;
+  };
+  social: Record<SocialNetwork, string> & {
+    title: string;
+    lead: string;
   };
   footer: {
     about: string;

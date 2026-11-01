@@ -11,7 +11,8 @@
     "images": "node scripts/optimize-images.mjs",
     "globe": "node --no-warnings scripts/build-globe.mjs",
     "icons": "node scripts/build-icons.mjs",
-    "assets": "npm run images && npm run globe && npm run icons",
+    "partners": "node scripts/build-partners.mjs",
+    "assets": "npm run images && npm run globe && npm run icons && npm run partners",
     "test:smoke": "node scripts/smoke-test.mjs",
     "og": "node scripts/build-og.mjs"
   },

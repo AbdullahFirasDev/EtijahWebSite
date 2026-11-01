@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { WhatsAppIcon } from "@/components/ui/icons";
+import { SocialLinks } from "@/components/ui/SocialLinks";
 import { site, telUrl, whatsappUrl } from "@/content/site";
 import type { Dictionary, NavKey } from "@/content/types";
 import { formatIndex } from "@/lib/format";
@@ -239,6 +240,7 @@ export function SiteHeader({ dict }: { dict: Dictionary }) {
                 {site.phone.display}
               </span>
             </a>
+            <SocialLinks dict={dict} tone="dark" className="justify-center pt-3 sm:col-span-2" />
             <Link
               href={nav.language.href}
               hrefLang={nav.language.hrefLang}

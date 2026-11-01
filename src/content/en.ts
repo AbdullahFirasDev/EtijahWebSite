@@ -18,6 +18,7 @@ export const en: Dictionary = {
     links: {
       services: "Services",
       why: "Why Etijah",
+      partners: "Partners",
       destinations: "Inspiration",
       process: "How it works",
       about: "About",
@@ -113,6 +114,13 @@ export const en: Dictionary = {
         text: "We stay with you from your first question until your booking is confirmed and your documents are ready.",
       },
     ],
+  },
+  partners: {
+    eyebrow: "Our partners",
+    title: "Partners we trust on every journey",
+    lead: "We work with leading airlines and global booking systems, giving you wider choice and better-timed flights for your trip.",
+    pause: "Pause logo animation",
+    play: "Play logo animation",
   },
   destinations: {
     eyebrow: "Travel inspiration",
@@ -213,6 +221,7 @@ export const en: Dictionary = {
     lead: "Call us directly, message us on WhatsApp, or visit our office. We are happy to answer your questions.",
     phoneLabel: "Phone",
     phoneAction: "Call now",
+    phoneAltLabel: "Additional phone",
     whatsappLabel: "WhatsApp",
     whatsappValue: "Message us directly",
     whatsappAction: "Start a chat",
@@ -279,6 +288,13 @@ export const en: Dictionary = {
     whatsapp: "Message us on WhatsApp",
     call: "Call now",
     whatsappText: "Hello, I would like to plan my next trip.",
+  },
+  social: {
+    title: "Follow us",
+    lead: "Our latest news and travel ideas on social media",
+    instagram: "Instagram",
+    tiktok: "TikTok",
+    facebook: "Facebook",
   },
   footer: {
     about: "Travel and tourism services in Najaf, Iraq: airline tickets, visas, travel health insurance, entry approvals, and tourism packages.",
