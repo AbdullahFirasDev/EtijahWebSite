@@ -7,6 +7,14 @@
     "width": 420,
     "height": 149
   },
+  "basra-airlines": {
+    "width": 324,
+    "height": 104
+  },
+  "egyptair": {
+    "width": 308,
+    "height": 168
+  },
   "emirates": {
     "width": 243,
     "height": 168
@@ -19,13 +27,45 @@
     "width": 420,
     "height": 152
   },
+  "fly-erbil": {
+    "width": 420,
+    "height": 81
+  },
   "flydubai": {
     "width": 420,
     "height": 86
   },
+  "flynas": {
+    "width": 383,
+    "height": 168
+  },
   "global-aviation": {
     "width": 420,
     "height": 147
+  },
+  "gulf-air": {
+    "width": 420,
+    "height": 151
+  },
+  "iraqi-airways": {
+    "width": 253,
+    "height": 168
+  },
+  "jazeera-airways": {
+    "width": 420,
+    "height": 131
+  },
+  "middle-east-airlines": {
+    "width": 420,
+    "height": 100
+  },
+  "oman-air": {
+    "width": 420,
+    "height": 103
+  },
+  "pegasus": {
+    "width": 420,
+    "height": 70
   },
   "qatar-airways": {
     "width": 420,

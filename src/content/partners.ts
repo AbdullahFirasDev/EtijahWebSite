@@ -26,6 +26,16 @@ export const partners: Partner[] = [
   { logo: "royal-jordanian", nameAr: "الملكية الأردنية", nameEn: "Royal Jordanian" },
   { logo: "ur-airlines", nameAr: "أور للطيران", nameEn: "Ur Airlines" },
   { logo: "global-aviation", nameAr: "جلوبال أفييشن", nameEn: "Global Aviation" },
+  { logo: "pegasus", nameAr: "طيران بيغاسوس", nameEn: "Pegasus Airlines" },
+  { logo: "gulf-air", nameAr: "طيران الخليج", nameEn: "Gulf Air" },
+  { logo: "fly-erbil", nameAr: "فلاي أربيل", nameEn: "Fly Erbil" },
+  { logo: "basra-airlines", nameAr: "خطوط البصرة الجوية", nameEn: "Basra Airlines" },
+  { logo: "oman-air", nameAr: "الطيران العُماني", nameEn: "Oman Air" },
+  { logo: "middle-east-airlines", nameAr: "طيران الشرق الأوسط", nameEn: "Middle East Airlines" },
+  { logo: "jazeera-airways", nameAr: "طيران الجزيرة", nameEn: "Jazeera Airways", scale: 0.92 },
+  { logo: "iraqi-airways", nameAr: "الخطوط الجوية العراقية", nameEn: "Iraqi Airways" },
+  { logo: "flynas", nameAr: "طيران ناس", nameEn: "flynas" },
+  { logo: "egyptair", nameAr: "مصر للطيران", nameEn: "EgyptAir" },
 ];
 
 // Every card is 20:9. Logos share a target *area* instead of a width or a height, so a

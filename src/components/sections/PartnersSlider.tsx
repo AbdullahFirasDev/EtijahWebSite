@@ -22,8 +22,11 @@ interface PartnersSliderProps {
   children: ReactNode;
 }
 
-/** Times each row's logos repeat inside one loop period, so a period is wider than the widest lane (120rem). */
-const REPEAT = 2;
+/**
+ * Minimum cards in one loop period. At the largest card size (14rem + gutter) this keeps a
+ * period wider than the widest lane (120rem), so the loop never shows a gap.
+ */
+const MIN_PERIOD_CARDS = 10;
 /** Cruising speed in CSS px per second. */
 const SPEED = 38;
 
@@ -224,20 +227,24 @@ export function PartnersSlider({ rows, rtl, labels, children }: PartnersSliderPr
 
       {/* With reduced motion, lanes and tracks dissolve (display: contents) into one centred, wrapped grid. */}
       <div className="mx-auto mt-12 flex max-w-[120rem] flex-col sm:mt-14 lg:mt-16 motion-reduce:max-w-[78rem] motion-reduce:flex-row motion-reduce:flex-wrap motion-reduce:justify-center motion-reduce:gap-y-4 motion-reduce:px-3">
-        {rows.map((row, r) => (
-          <div
-            key={r}
-            data-lane
-            data-reveal
-            className="touch-pan-y overflow-hidden py-4 select-none [mask-image:linear-gradient(90deg,transparent,#000_9%,#000_91%,transparent)] motion-safe:cursor-grab motion-safe:active:cursor-grabbing motion-reduce:contents"
-          >
-            <ul role="list" data-track className="flex w-max will-change-transform motion-reduce:contents">
-              {Array.from({ length: REPEAT * 2 }, (_, copy) =>
-                row.map((card) => <LogoCard key={`${copy}-${card.id}`} card={card} duplicate={copy > 0} />),
-              )}
-            </ul>
-          </div>
-        ))}
+        {rows.map((row, r) => {
+          // Short rows repeat inside a period; the whole period is then doubled for the seamless loop.
+          const copies = Math.ceil(MIN_PERIOD_CARDS / row.length) * 2;
+          return (
+            <div
+              key={r}
+              data-lane
+              data-reveal
+              className="touch-pan-y overflow-hidden py-4 select-none [mask-image:linear-gradient(90deg,transparent,#000_9%,#000_91%,transparent)] motion-safe:cursor-grab motion-safe:active:cursor-grabbing motion-reduce:contents"
+            >
+              <ul role="list" data-track className="flex w-max will-change-transform motion-reduce:contents">
+                {Array.from({ length: copies }, (_, copy) =>
+                  row.map((card) => <LogoCard key={`${copy}-${card.id}`} card={card} duplicate={copy > 0} />),
+                )}
+              </ul>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ const PHONE_ALT = "+9647716666150";
 const WA = "https://wa.me/9647826888850";
 const MAPS = "https://maps.app.goo.gl/kWzQFMfET6hf8VXE9";
 const SOCIAL = ["https://www.instagram.com/aletijah", "https://www.tiktok.com/@aletijah", "https://www.facebook.com/share/1dGfGm6rb3/"];
-const PARTNERS = 13;
+const PARTNERS = 23;
 
 await mkdir(shotDir, { recursive: true });
 const server = await serveStatic(path.join(root, "out"));
