@@ -1,10 +1,11 @@
-// End-to-end smoke test of the static export in a real browser.
+// Smoke test of the marketing site (home pages, motion, forms, 404) in a real browser.
 // Usage: npm run build && npm run test:smoke [-- <screenshot-dir>]
+// Starts `next start` on a free port with a temporary database.
 // Uses an installed Edge/Chrome via playwright-core (BROWSER_CHANNEL=msedge|chrome).
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright-core";
-import { serveStatic } from "./serve-static.mjs";
+import { startNextServer } from "./lib/next-server.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const shotDir = path.resolve(process.argv[2] ?? path.join(root, ".smoke"));
@@ -17,8 +18,8 @@ const SOCIAL = ["https://www.instagram.com/aletijah", "https://www.tiktok.com/@a
 const PARTNERS = 23;
 
 await mkdir(shotDir, { recursive: true });
-const server = await serveStatic(path.join(root, "out"));
-const base = `http://127.0.0.1:${server.address().port}`;
+const server = await startNextServer();
+const base = server.base;
 
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -291,7 +292,7 @@ await browser.close();
   check("[404] unknown route serves 404 page", res.status === 404 && body.includes("404"));
 }
 
-server.close();
+await server.stop();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed. Screenshots: ${shotDir}`);
 process.exit(failed.length ? 1 : 0);

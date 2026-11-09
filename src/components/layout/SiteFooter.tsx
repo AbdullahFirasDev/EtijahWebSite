@@ -3,12 +3,17 @@ import { Logo } from "@/components/brand/Logo";
 import { WhatsAppIcon } from "@/components/ui/icons";
 import { SocialLinks } from "@/components/ui/SocialLinks";
 import { site, telAltUrl, telUrl, whatsappUrl } from "@/content/site";
+import { localePath, travel } from "@/content/travel";
 import type { Dictionary, NavKey } from "@/content/types";
+import { asset } from "@/lib/asset";
 
 const NAV_ORDER: NavKey[] = ["services", "why", "partners", "destinations", "process", "about", "contact"];
 
-export function SiteFooter({ dict }: { dict: Dictionary }) {
+/** Site footer. On sub-pages (`page`), section links point back to the home page. */
+export function SiteFooter({ dict, page }: { dict: Dictionary; page?: boolean }) {
   const { footer, nav, contact } = dict;
+  const home = dict.locale === "ar" ? "/" : "/en/";
+  const anchor = (key: string) => (page ? asset(`${home}#${key}`) : `#${key}`);
   const year = new Date().getFullYear();
   const headingClass = "text-sm font-bold text-accent-300 ltr:tracking-[0.14em] ltr:uppercase";
   const linkClass = "text-white/75 transition-colors hover:text-white";
@@ -19,7 +24,7 @@ export function SiteFooter({ dict }: { dict: Dictionary }) {
 
       <div className="container-site relative grid gap-12 sm:grid-cols-2 lg:grid-cols-12 lg:gap-10">
         <div className="sm:col-span-2 lg:col-span-4">
-          <a href="#top" aria-label={nav.home} className="inline-block rounded-xl text-white">
+          <a href={page ? asset(home) : "#top"} aria-label={nav.home} className="inline-block rounded-xl text-white">
             <Logo locale={dict.locale} tone="dark" idSuffix="footer" badgeClassName="size-13" />
           </a>
           <p className="mt-6 max-w-sm leading-[1.95] text-white/70">{footer.about}</p>
@@ -43,9 +48,14 @@ export function SiteFooter({ dict }: { dict: Dictionary }) {
             {footer.navTitle}
           </h2>
           <ul role="list" className="mt-5 space-y-3">
+            <li>
+              <a href={asset(localePath(dict.locale, "/programs/"))} className={`font-bold ${linkClass}`}>
+                {travel[dict.locale].nav.programs}
+              </a>
+            </li>
             {NAV_ORDER.map((key) => (
               <li key={key}>
-                <a href={`#${key}`} className={linkClass}>
+                <a href={anchor(key)} className={linkClass}>
                   {nav.links[key]}
                 </a>
               </li>
@@ -58,7 +68,7 @@ export function SiteFooter({ dict }: { dict: Dictionary }) {
           <ul role="list" className="mt-5 space-y-3">
             {dict.services.items.map((s) => (
               <li key={s.id}>
-                <a href="#services" className={linkClass}>
+                <a href={anchor("services")} className={linkClass}>
                   {s.title}
                 </a>
               </li>

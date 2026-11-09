@@ -15,7 +15,7 @@ export const viewport: Viewport = {
 /** Arabic root layout (default locale, right-to-left). */
 export default function ArabicLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" className={cairo.variable}>
+    <html lang="ar" dir="rtl" className={cairo.variable} data-scroll-behavior="smooth">
       <body>{children}</body>
     </html>
   );

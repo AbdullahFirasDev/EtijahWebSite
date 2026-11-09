@@ -7,14 +7,32 @@ import { Logo } from "@/components/brand/Logo";
 import { WhatsAppIcon } from "@/components/ui/icons";
 import { SocialLinks } from "@/components/ui/SocialLinks";
 import { site, telUrl, whatsappUrl } from "@/content/site";
+import { localePath, travel } from "@/content/travel";
 import type { Dictionary, NavKey } from "@/content/types";
+import { asset } from "@/lib/asset";
 import { formatIndex } from "@/lib/format";
 import { lockScroll, scrollToHash } from "@/lib/scroll";
 
 const NAV_ORDER: NavKey[] = ["services", "why", "destinations", "process", "about", "contact"];
 
-export function SiteHeader({ dict }: { dict: Dictionary }) {
+interface SubPage {
+  /** Equivalent page in the other language (defaults to the other home page). */
+  languageHref?: string;
+  /** Highlights the "Offers" link. */
+  current?: "offers";
+}
+
+/**
+ * Site header. On the home page, links scroll to sections; on sub-pages (`page` set) they
+ * navigate to the home page sections instead.
+ */
+export function SiteHeader({ dict, page }: { dict: Dictionary; page?: SubPage }) {
   const { nav } = dict;
+  const offersLabel = travel[dict.locale].nav.offers;
+  const offersHref = localePath(dict.locale, "/programs/");
+  const home = dict.locale === "ar" ? "/" : "/en/";
+  const anchor = (key: string) => (page ? asset(`${home}#${key}`) : `#${key}`);
+  const languageHref = page?.languageHref ?? nav.language.href;
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<NavKey | null>(null);
@@ -93,6 +111,10 @@ export function SiteHeader({ dict }: { dict: Dictionary }) {
   };
 
   const onMenuLink = (event: MouseEvent<HTMLAnchorElement>, hash: string) => {
+    if (page) {
+      close(false);
+      return;
+    }
     event.preventDefault();
     close(false);
     // Wait for the scroll lock to release before scrolling.
@@ -119,18 +141,30 @@ export function SiteHeader({ dict }: { dict: Dictionary }) {
       </a>
 
       <div className={`container-site flex items-center justify-between gap-6 transition-[height] duration-500 ease-out-expo ${scrolled ? "h-[4.25rem]" : "h-20 lg:h-[5.25rem]"}`}>
-        <a href="#top" aria-label={nav.home} className="relative z-[51] rounded-xl">
+        <a href={page ? asset(home) : "#top"} aria-label={nav.home} className="relative z-[51] rounded-xl">
           <Logo locale={dict.locale} tone={scrolled && !open ? "light" : "dark"} idSuffix="header" />
         </a>
 
         <nav aria-label={dict.locale === "ar" ? "التنقل الرئيسي" : "Main navigation"} className="hidden lg:block">
-          <ul role="list" className="flex items-center gap-1 xl:gap-2">
+          <ul role="list" className="flex items-center gap-0.5 xl:gap-1.5">
+            <li>
+              <Link
+                href={offersHref}
+                prefetch={false}
+                aria-current={page?.current === "offers" ? "page" : undefined}
+                className={`relative inline-flex items-center gap-1.5 rounded-full px-2.5 py-2 text-[0.95rem] font-bold whitespace-nowrap transition-colors xl:px-3 ${
+                  scrolled ? "text-accent-700 hover:text-accent-600" : "text-accent-300 hover:text-accent-200"
+                } ${page?.current === "offers" ? "underline decoration-2 underline-offset-8" : ""}`}
+              >
+                {offersLabel}
+              </Link>
+            </li>
             {NAV_ORDER.map((key) => (
               <li key={key}>
                 <a
-                  href={`#${key}`}
-                  aria-current={active === key ? "location" : undefined}
-                  className={`group relative rounded-full px-3 py-2 text-[0.95rem] font-semibold transition-colors xl:px-3.5 ${
+                  href={anchor(key)}
+                  aria-current={!page && active === key ? "location" : undefined}
+                  className={`group relative rounded-full px-2.5 py-2 text-[0.95rem] font-semibold whitespace-nowrap transition-colors xl:px-3 ${
                     scrolled
                       ? active === key ? "text-brand-600" : "text-brand-950/80 hover:text-brand-600"
                       : active === key ? "text-white" : "text-white/80 hover:text-white"
@@ -151,7 +185,7 @@ export function SiteHeader({ dict }: { dict: Dictionary }) {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
-            href={nav.language.href}
+            href={languageHref}
             hrefLang={nav.language.hrefLang}
             lang={nav.language.hrefLang}
             aria-label={nav.language.aria}
@@ -168,10 +202,10 @@ export function SiteHeader({ dict }: { dict: Dictionary }) {
             href={whatsappUrl(dict.general.whatsappText)}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden h-11 items-center gap-2 rounded-full bg-accent-500 px-5 text-[0.95rem] font-bold text-brand-950 transition-[background-color,box-shadow,transform] duration-300 hover:bg-accent-400 hover:shadow-glow motion-safe:hover:-translate-y-0.5 lg:inline-flex"
+            className="hidden h-11 shrink-0 items-center gap-2 rounded-full bg-accent-500 px-3 text-[0.95rem] font-bold whitespace-nowrap 2xl:px-5 text-brand-950 transition-[background-color,box-shadow,transform] duration-300 hover:bg-accent-400 hover:shadow-glow motion-safe:hover:-translate-y-0.5 lg:inline-flex"
           >
             <WhatsAppIcon className="size-5" />
-            {nav.cta}
+            <span className="sr-only 2xl:not-sr-only">{nav.cta}</span>
             <span className="sr-only">{dict.general.opensInNewTab}</span>
           </a>
 
@@ -206,10 +240,18 @@ export function SiteHeader({ dict }: { dict: Dictionary }) {
         <div className="container-site relative flex min-h-full flex-col pt-28 pb-10">
           <nav aria-label={dict.locale === "ar" ? "قائمة التنقل" : "Menu navigation"}>
             <ol role="list" className="flex flex-col">
+              <li className="border-b border-white/10 motion-safe:animate-[menu-in_0.7s_var(--ease-out-expo)_both]" style={{ animationDelay: "30ms" }}>
+                <Link href={offersHref} prefetch={false} onClick={() => close(false)} className="flex items-baseline justify-between gap-4 py-4 text-[1.75rem] font-extrabold text-accent-300 transition-colors hover:text-accent-200">
+                  {offersLabel}
+                  <span aria-hidden="true" className="text-sm font-semibold text-white/40">
+                    ★
+                  </span>
+                </Link>
+              </li>
               {NAV_ORDER.map((key, i) => (
                 <li key={key} className="border-b border-white/10 motion-safe:animate-[menu-in_0.7s_var(--ease-out-expo)_both]" style={{ animationDelay: `${60 + i * 55}ms` }}>
                   <a
-                    href={`#${key}`}
+                    href={anchor(key)}
                     onClick={(e) => onMenuLink(e, `#${key}`)}
                     className="flex items-baseline justify-between gap-4 py-4 text-[1.75rem] font-extrabold text-white transition-colors hover:text-accent-300"
                   >
@@ -242,7 +284,7 @@ export function SiteHeader({ dict }: { dict: Dictionary }) {
             </a>
             <SocialLinks dict={dict} tone="dark" className="justify-center pt-3 sm:col-span-2" />
             <Link
-              href={nav.language.href}
+              href={languageHref}
               hrefLang={nav.language.hrefLang}
               lang={nav.language.hrefLang}
               prefetch={false}

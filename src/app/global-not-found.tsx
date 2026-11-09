@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 /** Bilingual 404 (the site has separate Arabic and English root layouts). */
 export default function GlobalNotFound() {
   return (
-    <html lang="ar" dir="rtl" className={cairo.variable}>
+    <html lang="ar" dir="rtl" className={cairo.variable} data-scroll-behavior="smooth">
       <body className="surface-dark grid min-h-svh place-items-center bg-brand-950 px-5 py-16 text-center">
         <main className="flex max-w-xl flex-col items-center">
           <LogoBadge className="size-20" idSuffix="404" />

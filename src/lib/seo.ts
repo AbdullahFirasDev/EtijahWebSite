@@ -86,3 +86,37 @@ export function travelAgencyJsonLd(dict: Dictionary) {
     },
   };
 }
+
+/**
+ * Metadata for a public travel page (offers, program, hotel). `path` is locale-free
+ * ("/programs/x/"); canonical and hreflang alternates are added once NEXT_PUBLIC_SITE_URL is set.
+ */
+export function travelPageMetadata(opts: {
+  locale: "ar" | "en";
+  title: string;
+  description: string;
+  path: string;
+  image?: string | null;
+  index?: boolean;
+}): Metadata {
+  const { locale, title, description, path, image } = opts;
+  const brand = locale === "ar" ? site.nameAr : site.nameEn;
+  const full = title.includes(brand) ? title : `${title} | ${brand}`;
+  const ar = path;
+  const en = `/en${path}`;
+  const metadata: Metadata = {
+    title: full,
+    description,
+    openGraph: { type: "website", siteName: brand, title: full, description, locale: locale === "ar" ? "ar_IQ" : "en_US" },
+    twitter: { card: "summary_large_image", title: full, description },
+    robots: { index: opts.index !== false, follow: true },
+  };
+  if (site.url) {
+    metadata.metadataBase = new URL(site.url);
+    metadata.alternates = { canonical: locale === "ar" ? ar : en, languages: { ar, en, "x-default": ar } };
+    const img = image ?? OG_IMAGES[locale];
+    metadata.openGraph = { ...metadata.openGraph, url: locale === "ar" ? ar : en, images: [{ url: img }] };
+    metadata.twitter = { ...metadata.twitter, images: [img] };
+  }
+  return metadata;
+}

@@ -5,6 +5,7 @@ import { SmoothScroll } from "@/components/motion/SmoothScroll";
 import { About } from "@/components/sections/About";
 import { Contact } from "@/components/sections/Contact";
 import { Destinations } from "@/components/sections/Destinations";
+import { FeaturedPrograms } from "@/components/sections/FeaturedPrograms";
 import { FinalCta } from "@/components/sections/FinalCta";
 import { Hero } from "@/components/sections/Hero";
 import { Partners } from "@/components/sections/Partners";
@@ -26,6 +27,7 @@ export function HomePage({ dict }: { dict: Dictionary }) {
         <WhyEtijah dict={dict} />
         <Partners dict={dict} />
         <Destinations dict={dict} />
+        <FeaturedPrograms locale={dict.locale} />
         <Process dict={dict} />
         <About dict={dict} />
         <Contact dict={dict} />

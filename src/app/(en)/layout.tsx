@@ -15,7 +15,7 @@ export const viewport: Viewport = {
 /** English root layout (left-to-right). */
 export default function EnglishLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" dir="ltr" className={cairo.variable}>
+    <html lang="en" dir="ltr" className={cairo.variable} data-scroll-behavior="smooth">
       <body>{children}</body>
     </html>
   );

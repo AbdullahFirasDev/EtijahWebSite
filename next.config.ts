@@ -3,19 +3,49 @@ import type { NextConfig } from "next";
 // Optional sub-folder deployment, e.g. NEXT_PUBLIC_BASE_PATH=/etijah for http://host/etijah/
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || undefined;
 
+/** Headers for pages that must never be indexed, cached by shared caches, or leak their URL. */
+const privateHeaders = [
+  { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+  { key: "Cache-Control", value: "private, no-store" },
+  // Quote links carry a secret token: never send it to hotel sites in the Referer header.
+  { key: "Referrer-Policy", value: "no-referrer" },
+];
+
 const nextConfig: NextConfig = {
-  // Fully static site: `next build` emits plain HTML/CSS/JS in `out/`, which any
-  // static host (Apache/XAMPP, Nginx, Vercel, Netlify…) can serve.
-  output: "export",
-  // `/en/` → `out/en/index.html`, so Apache serves routes without rewrite rules.
+  // Runs as a Node.js server (`next start`): the travel programs, staff portal, B2B quotes
+  // and PDF generator need a database and server-side logic. Marketing pages stay prerendered.
+  // `/en/` keeps its trailing slash, matching the URLs of the previous static site.
   trailingSlash: true,
   basePath,
   poweredByHeader: false,
   reactStrictMode: true,
+  // Native / browser-driving packages are loaded from node_modules at runtime, not bundled.
+  serverExternalPackages: ["sharp", "playwright-core"],
   experimental: {
     // Arabic (/) and English (/en) use separate root layouts, so the 404 page is global.
     globalNotFound: true,
     optimizePackageImports: ["lucide-react"],
+    serverActions: {
+      // Program and quote editors post structured JSON (images upload separately).
+      bodySizeLimit: "2mb",
+    },
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+        ],
+      },
+      { source: "/staff/:path*", headers: privateHeaders },
+      { source: "/staff", headers: privateHeaders },
+      { source: "/q/:path*", headers: privateHeaders },
+      { source: "/api/staff/:path*", headers: privateHeaders },
+    ];
   },
   turbopack: {
     rules: {

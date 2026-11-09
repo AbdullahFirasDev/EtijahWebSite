@@ -1,0 +1,715 @@
+"use client";
+
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Building2,
+  Download,
+  Eye,
+  FileDown,
+  Import,
+  Lock,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { asset } from "@/lib/asset";
+import { addDays, daysBetween } from "@/lib/dates";
+import type { MediaRef } from "@/lib/media";
+import { CURRENCIES, formatMoney, type CurrencyCode } from "@/lib/money";
+import { quoteMargin, quoteTotals, type DiscountKind, type ItemKind, type ItemUnit, type PricingMode } from "@/lib/quote-math";
+import { BOARD_LABELS, BOARDS, ITEM_UNITS, UNIT_LABELS, type Board, type QuoteStatus } from "@/lib/travel-labels";
+import { programDraftForQuoteAction, saveQuoteAction } from "@/server/actions/quotes";
+import { CompanyEditor } from "./CompanyEditor";
+import { MoneyInput, NumberInput, StringList } from "./fields";
+import { ImagePicker } from "./ImagePicker";
+import { Modal } from "./Modal";
+import { QuoteSharePanel, type QuoteMeta } from "./QuoteSharePanel";
+import { QuoteStatusBadge } from "./StatusBadge";
+import { Badge, Button, Card, CardHeader, Field, Input, Select, Textarea } from "./ui";
+import { useActionRunner } from "./useActionRunner";
+
+export interface QuoteItemState {
+  key: string;
+  kind: ItemKind;
+  label: string;
+  description: string | null;
+  unit: ItemUnit;
+  quantity: number;
+  unit_price: number | null;
+  unit_cost: number | null;
+}
+
+export interface QuoteFormState {
+  company_id: number | null;
+  contact_id: number | null;
+  program_id: number | null;
+  locale: "ar" | "en";
+  title: string;
+  destination: string | null;
+  intro: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  adults: number;
+  children: number;
+  infants: number;
+  rooms: number;
+  rooms_note: string | null;
+  currency: string;
+  pricing_mode: PricingMode;
+  discount_kind: DiscountKind | null;
+  discount_value: number;
+  discount_label: string | null;
+  inclusions: string[];
+  exclusions: string[];
+  notes: string | null;
+  terms: string | null;
+  internal_notes: string | null;
+  cover: MediaRef | null;
+  gallery: MediaRef[];
+  valid_until: string;
+  days: { title: string; body: string | null }[];
+  hotels: { hotel_id: number | null; check_in: string | null; check_out: string | null; nights: number; room_type: string | null; board: Board | null; rooms: number | null }[];
+  items: QuoteItemState[];
+}
+
+interface Props {
+  initial: QuoteFormState;
+  meta: (QuoteMeta & { status: QuoteStatus; revision: number }) | null;
+  companies: { id: number; name: string; contacts: { id: number; name: string; phone: string | null; email: string | null; is_primary: boolean }[] }[];
+  programs: { id: number; label: string }[];
+  hotels: { id: number; name: string; destination: string; stars: number | null; hasLink: boolean }[];
+  currencies: string[];
+  defaultTerms: { ar: string; en: string };
+  canDelete: boolean;
+}
+
+let seq = 0;
+const k = () => `i${++seq}`;
+
+const KIND_META: Record<ItemKind, { label: string; hint: string }> = {
+  main: { label: "بنود السعر الأساسية", hint: "تدخل في الإجمالي." },
+  fee: { label: "تكاليف إضافية", hint: "رسوم أو إضافات تدخل في الإجمالي (مثل ضرائب المدينة)." },
+  option: { label: "خدمات اختيارية", hint: "تظهر للعميل بأسعارها ولا تدخل في الإجمالي." },
+};
+
+export function QuoteEditor({ initial, meta, companies, programs, hotels, currencies, defaultTerms, canDelete }: Props) {
+  const [f, setF] = useState(initial);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [companyModal, setCompanyModal] = useState(false);
+  const [importId, setImportId] = useState<number | null>(initial.program_id);
+  const router = useRouter();
+  const { run, pending } = useActionRunner();
+  const importer = useActionRunner();
+  // Unsaved changes = the form differs from what was last loaded from the server.
+  const [saved, setSaved] = useState(() => JSON.stringify(initial));
+  const dirty = useMemo(() => JSON.stringify(f) !== saved, [f, saved]);
+
+  const set = <K extends keyof QuoteFormState>(key: K, v: QuoteFormState[K]) => setF((x) => ({ ...x, [key]: v }));
+  const company = companies.find((c) => c.id === f.company_id) ?? null;
+  const contact = company?.contacts.find((c) => c.id === f.contact_id) ?? null;
+  const ar = f.locale === "ar";
+  const cur = f.currency as CurrencyCode;
+  const money = (v: number) => formatMoney(v, cur, "ar");
+
+  const priced = useMemo(() => f.items.map((i) => ({ ...i, unit_price: i.unit_price ?? 0 })), [f.items]);
+  const totals = useMemo(() => quoteTotals({ ...f, items: priced }), [f, priced]);
+  const margin = useMemo(() => quoteMargin({ ...f, items: priced }), [f, priced]);
+
+  const payload = () => ({
+    ...f,
+    company_id: f.company_id ?? 0,
+    cover_media_id: f.cover?.id ?? null,
+    gallery: f.gallery.map((m) => m.id),
+    hotels: f.hotels.filter((h) => h.hotel_id).map((h) => ({ ...h, hotel_id: h.hotel_id! })),
+    items: f.items.map((i) => ({ kind: i.kind, label: i.label, description: i.description, unit: i.unit, quantity: i.quantity, unit_price: i.unit_price ?? 0, unit_cost: i.unit_cost })),
+    cover: undefined,
+  });
+
+  const save = () =>
+    run(() => saveQuoteAction({ id: meta?.id ?? null, quote: payload() }), {
+      onOk: (d) => {
+        setErrors({});
+        setSaved(JSON.stringify(f));
+        if (!meta) router.replace(`/staff/quotes/${d.id}/`);
+      },
+      onError: (r) => setErrors(r.fieldErrors ?? {}),
+    });
+
+  const importProgram = () => {
+    if (!importId) return;
+    const hasContent = f.days.length || f.hotels.length || f.items.length;
+    if (hasContent && !window.confirm("سيستبدل الاستيراد البرنامج اليومي والفنادق والأسعار والخدمات الحالية. متابعة؟")) return;
+    importer.run(() => programDraftForQuoteAction({ programId: importId, locale: f.locale, adults: f.adults }), {
+      refresh: false,
+      onOk: (d) => {
+        setF((x) => ({
+          ...x,
+          program_id: d.program_id,
+          title: d.title,
+          destination: d.destination,
+          intro: d.intro,
+          currency: currencies.includes(d.currency) ? d.currency : x.currency,
+          cover: d.cover ?? x.cover,
+          gallery: d.gallery,
+          days: d.days,
+          hotels: (() => {
+            // Consecutive stays from the travel date, when it is known.
+            let cursor = x.start_date;
+            return d.hotels.map((h) => {
+              if (!cursor) return h;
+              const stay = { ...h, check_in: cursor, check_out: addDays(cursor, h.nights) };
+              cursor = stay.check_out;
+              return stay;
+            });
+          })(),
+          inclusions: d.inclusions,
+          exclusions: d.exclusions,
+          items: d.items.map((i) => ({ ...i, key: k() })),
+          end_date: x.start_date ? addDays(x.start_date, Math.max(0, d.duration_days - 1)) : x.end_date,
+        }));
+      },
+    });
+  };
+
+  const setItem = (key: string, patch: Partial<QuoteItemState>) => set("items", f.items.map((i) => (i.key === key ? { ...i, ...patch } : i)));
+  const addItem = (kind: ItemKind) =>
+    set("items", [...f.items, { key: k(), kind, label: "", description: null, unit: kind === "main" ? "person" : "group", quantity: kind === "main" ? Math.max(1, f.adults) : 1, unit_price: null, unit_cost: null }]);
+  const qtyFor = (unit: ItemUnit) => (unit === "person" ? f.adults : unit === "child" ? f.children : unit === "room" ? f.rooms : unit === "night" && f.start_date && f.end_date ? daysBetween(f.start_date, f.end_date) : 1);
+
+  const err = (p: string) => errors[`quote.${p}`];
+  const errorList = Object.values(errors);
+  const linkless = f.hotels.filter((h) => h.hotel_id && !hotels.find((o) => o.id === h.hotel_id)?.hasLink);
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[1fr_21rem]">
+      <div className="grid min-w-0 gap-6">
+        {errorList.length ? (
+          <div role="alert" className="rounded-2xl border border-danger/25 bg-[#fdeeee] p-4 text-sm text-[#a42424]">
+            <p className="font-extrabold">يرجى تصحيح ما يلي:</p>
+            <ul className="mt-1 list-disc ps-5">
+              {errorList.slice(0, 8).map((v, i) => (
+                <li key={i}>{v}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <Card>
+          <CardHeader title="العميل ولغة العرض" />
+          <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <Field label="الشركة المستلمة" required error={err("company_id")} htmlFor="q-company">
+              <div className="flex gap-2">
+                <Select
+                  id="q-company"
+                  value={f.company_id ?? ""}
+                  onChange={(e) => {
+                    const id = e.target.value ? Number(e.target.value) : null;
+                    const c = companies.find((x) => x.id === id);
+                    setF((x) => ({ ...x, company_id: id, contact_id: c?.contacts.find((ct) => ct.is_primary)?.id ?? c?.contacts[0]?.id ?? null }));
+                  }}
+                >
+                  <option value="">اختر الشركة…</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button variant="subtle" aria-label="شركة جديدة" onClick={() => setCompanyModal(true)} className="shrink-0">
+                  <Building2 className="size-4" aria-hidden="true" /> جديدة
+                </Button>
+              </div>
+            </Field>
+            <Field label="جهة الاتصال" htmlFor="q-contact" hint={company && !company.contacts.length ? "لا توجد جهات اتصال لهذه الشركة بعد." : undefined}>
+              <Select id="q-contact" value={f.contact_id ?? ""} onChange={(e) => set("contact_id", e.target.value ? Number(e.target.value) : null)} disabled={!company}>
+                <option value="">بدون</option>
+                {company?.contacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-1.5 text-sm font-bold text-brand-950">لغة العرض</legend>
+              <div className="inline-flex rounded-xl bg-mist p-1" role="radiogroup" aria-label="لغة العرض">
+                {(
+                  [
+                    ["ar", "العربية"],
+                    ["en", "English"],
+                  ] as const
+                ).map(([l, label]) => (
+                  <button
+                    key={l}
+                    type="button"
+                    role="radio"
+                    aria-checked={f.locale === l}
+                    onClick={() =>
+                      setF((x) => ({
+                        ...x,
+                        locale: l,
+                        terms: !x.terms || x.terms === defaultTerms[x.locale] ? defaultTerms[l] : x.terms,
+                      }))
+                    }
+                    className={`rounded-lg px-4 py-1.5 text-sm font-bold ${f.locale === l ? "bg-white text-brand-950 shadow-sm" : "text-muted"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-muted">اكتب محتوى العرض بلغته. العناوين والجداول تُترجم تلقائياً في الصفحة وملف PDF.</p>
+            </fieldset>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="البرنامج السياحي" description="استورد برنامجاً جاهزاً ثم عدّله لهذه الشركة، أو ابنِ برنامجاً مخصصاً من الصفر." />
+          <div className="flex flex-wrap items-end gap-2 p-5">
+            <Field label="استيراد من برنامج" className="min-w-64 flex-1" htmlFor="q-import">
+              <Select id="q-import" value={importId ?? ""} onChange={(e) => setImportId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">برنامج مخصص (بدون استيراد)</option>
+                {programs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button variant="subtle" onClick={importProgram} disabled={!importId} loading={importer.pending}>
+              <Import className="size-4" aria-hidden="true" /> استيراد
+            </Button>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="تفاصيل الرحلة" />
+          <div className="grid gap-4 p-5 sm:grid-cols-2" dir={ar ? "rtl" : "ltr"}>
+            <Field label="عنوان العرض" required error={err("title")} className="sm:col-span-2" htmlFor="q-title">
+              <Input id="q-title" value={f.title} onChange={(e) => set("title", e.target.value)} placeholder={ar ? "رحلة تحفيزية لفريق المبيعات إلى إسطنبول" : "Sales team incentive trip to Istanbul"} />
+            </Field>
+            <Field label="الوجهة" htmlFor="q-dest">
+              <Input id="q-dest" value={f.destination ?? ""} onChange={(e) => set("destination", e.target.value)} placeholder={ar ? "إسطنبول وبورصة، تركيا" : "Istanbul & Bursa, Türkiye"} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="تاريخ السفر" htmlFor="q-start" error={err("start_date")}>
+                <Input id="q-start" type="date" dir="ltr" value={f.start_date ?? ""} onChange={(e) => set("start_date", e.target.value || null)} />
+              </Field>
+              <Field label="تاريخ العودة" htmlFor="q-end" error={err("end_date")}>
+                <Input id="q-end" type="date" dir="ltr" min={f.start_date ?? undefined} value={f.end_date ?? ""} onChange={(e) => set("end_date", e.target.value || null)} />
+              </Field>
+            </div>
+            <Field label="مقدمة العرض" className="sm:col-span-2" htmlFor="q-intro">
+              <Textarea id="q-intro" rows={3} value={f.intro ?? ""} onChange={(e) => set("intro", e.target.value)} />
+            </Field>
+            <div className="grid grid-cols-3 gap-3 sm:col-span-2 lg:grid-cols-5">
+              <Field label="البالغون" htmlFor="q-adults">
+                <NumberInput id="q-adults" value={f.adults} onChange={(v) => set("adults", v ?? 0)} />
+              </Field>
+              <Field label="الأطفال" htmlFor="q-children">
+                <NumberInput id="q-children" value={f.children} onChange={(v) => set("children", v ?? 0)} />
+              </Field>
+              <Field label="الرضّع" htmlFor="q-infants">
+                <NumberInput id="q-infants" value={f.infants} onChange={(v) => set("infants", v ?? 0)} />
+              </Field>
+              <Field label="عدد الغرف" htmlFor="q-rooms">
+                <NumberInput id="q-rooms" value={f.rooms} onChange={(v) => set("rooms", v ?? 0)} />
+              </Field>
+              <Field label="توزيع الغرف" className="col-span-3 lg:col-span-1" htmlFor="q-rooms-note">
+                <Input id="q-rooms-note" value={f.rooms_note ?? ""} onChange={(e) => set("rooms_note", e.target.value)} placeholder={ar ? "8 مزدوجة + 2 مفردة" : "8 double + 2 single"} />
+              </Field>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="الفنادق" description="اسم كل فندق يظهر رابطاً قابلاً للنقر في صفحة العرض وملف PDF." />
+          <div className="p-5">
+            {linkless.length ? (
+              <p className="mb-3 flex items-center gap-2 rounded-xl bg-accent-50 px-3 py-2 text-xs font-bold text-accent-700">
+                <AlertTriangle className="size-4" aria-hidden="true" /> {linkless.length} فندق بلا رابط معتمد: سيظهر اسمه نصاً عادياً. أضف الموقع الرسمي أو رابط الخريطة من صفحة الفندق.
+              </p>
+            ) : null}
+            <ul role="list" className="grid gap-3">
+              {f.hotels.map((h, i) => {
+                const upd = (patch: Partial<typeof h>) => set("hotels", f.hotels.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+                return (
+                  <li key={i} className="grid gap-3 rounded-xl border border-line p-3 md:grid-cols-6">
+                    <Field label={`الفندق ${i + 1}`} className="md:col-span-2" htmlFor={`qh-${i}`}>
+                      <Select id={`qh-${i}`} value={h.hotel_id ?? ""} onChange={(e) => upd({ hotel_id: e.target.value ? Number(e.target.value) : null })}>
+                        <option value="">اختر…</option>
+                        {hotels.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.name} — {o.destination} {o.stars ? `(${o.stars}★)` : ""}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="الوصول" htmlFor={`qh-in-${i}`}>
+                      <Input
+                        id={`qh-in-${i}`}
+                        type="date"
+                        dir="ltr"
+                        value={h.check_in ?? ""}
+                        onChange={(e) => upd({ check_in: e.target.value || null, nights: e.target.value && h.check_out ? Math.max(1, daysBetween(e.target.value, h.check_out)) : h.nights })}
+                      />
+                    </Field>
+                    <Field label="المغادرة" htmlFor={`qh-out-${i}`}>
+                      <Input
+                        id={`qh-out-${i}`}
+                        type="date"
+                        dir="ltr"
+                        min={h.check_in ?? undefined}
+                        value={h.check_out ?? ""}
+                        onChange={(e) => upd({ check_out: e.target.value || null, nights: h.check_in && e.target.value ? Math.max(1, daysBetween(h.check_in, e.target.value)) : h.nights })}
+                      />
+                    </Field>
+                    <Field label="الليالي" htmlFor={`qh-n-${i}`}>
+                      <NumberInput id={`qh-n-${i}`} min={1} value={h.nights} onChange={(v) => upd({ nights: v ?? 1 })} />
+                    </Field>
+                    <Field label="الغرف" htmlFor={`qh-r-${i}`}>
+                      <NumberInput id={`qh-r-${i}`} nullable value={h.rooms} onChange={(v) => upd({ rooms: v })} />
+                    </Field>
+                    <Field label="نوع الغرفة" className="md:col-span-3" htmlFor={`qh-t-${i}`}>
+                      <Input id={`qh-t-${i}`} dir={ar ? "rtl" : "ltr"} value={h.room_type ?? ""} onChange={(e) => upd({ room_type: e.target.value })} />
+                    </Field>
+                    <Field label="الوجبات" className="md:col-span-2" htmlFor={`qh-b-${i}`}>
+                      <Select id={`qh-b-${i}`} value={h.board ?? ""} onChange={(e) => upd({ board: (e.target.value || null) as Board | null })}>
+                        <option value="">غير محدد</option>
+                        {BOARDS.map((b) => (
+                          <option key={b} value={b}>
+                            {BOARD_LABELS[b].ar}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <div className="flex items-end justify-end gap-1">
+                      <Button size="sm" variant="ghost" aria-label="تقديم" onClick={() => set("hotels", f.hotels.map((x, j, a) => (j === i - 1 ? a[i] : j === i ? a[i - 1] : x)))} disabled={i === 0}>
+                        <ArrowUp className="size-4" aria-hidden="true" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-danger" aria-label="حذف الفندق" onClick={() => set("hotels", f.hotels.filter((_, j) => j !== i))}>
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <Button size="sm" variant="subtle" className="mt-3" onClick={() => set("hotels", [...f.hotels, { hotel_id: null, check_in: f.start_date, check_out: f.end_date, nights: f.start_date && f.end_date ? Math.max(1, daysBetween(f.start_date, f.end_date)) : 1, room_type: null, board: "BB", rooms: f.rooms || null }])}>
+              <Plus className="size-4" aria-hidden="true" /> إضافة فندق
+            </Button>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="البرنامج اليومي" />
+          <div className="p-5" dir={ar ? "rtl" : "ltr"}>
+            <ol className="grid gap-3">
+              {f.days.map((d, i) => (
+                <li key={i} className="grid gap-2 rounded-xl border border-line p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="num grid size-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">{i + 1}</span>
+                    <Input aria-label={`عنوان اليوم ${i + 1}`} value={d.title} onChange={(e) => set("days", f.days.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
+                    <Button size="sm" variant="ghost" aria-label="تقديم" disabled={i === 0} onClick={() => set("days", f.days.map((x, j, a) => (j === i - 1 ? a[i] : j === i ? a[i - 1] : x)))}>
+                      <ArrowUp className="size-4" aria-hidden="true" />
+                    </Button>
+                    <Button size="sm" variant="ghost" aria-label="تأخير" disabled={i === f.days.length - 1} onClick={() => set("days", f.days.map((x, j, a) => (j === i + 1 ? a[i] : j === i ? a[i + 1] : x)))}>
+                      <ArrowDown className="size-4" aria-hidden="true" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-danger" aria-label={`حذف اليوم ${i + 1}`} onClick={() => set("days", f.days.filter((_, j) => j !== i))}>
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <Textarea aria-label={`تفاصيل اليوم ${i + 1}`} rows={2} value={d.body ?? ""} onChange={(e) => set("days", f.days.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))} />
+                </li>
+              ))}
+            </ol>
+            <Button size="sm" variant="subtle" className="mt-3" onClick={() => set("days", [...f.days, { title: "", body: null }])}>
+              <Plus className="size-4" aria-hidden="true" /> إضافة يوم
+            </Button>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="يشمل / لا يشمل" />
+          <div className="grid gap-6 p-5 md:grid-cols-2">
+            <StringList label="يشمل العرض" dir={ar ? "rtl" : "ltr"} value={f.inclusions} onChange={(v) => set("inclusions", v)} />
+            <StringList label="لا يشمل العرض" dir={ar ? "rtl" : "ltr"} value={f.exclusions} onChange={(v) => set("exclusions", v)} />
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="الأسعار" description="الأسعار تُحسب على الخادم أيضاً. حقل «التكلفة» داخلي ولا يظهر للعميل أبداً." />
+          <div className="grid gap-5 p-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="العملة" htmlFor="q-currency">
+                <Select id="q-currency" value={f.currency} onChange={(e) => set("currency", e.target.value)}>
+                  {currencies.map((c) => (
+                    <option key={c} value={c}>
+                      {CURRENCIES[c as CurrencyCode]?.nameAr ?? c} ({c})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <fieldset>
+                <legend className="mb-1.5 text-sm font-bold text-brand-950">طريقة عرض السعر الرئيسي</legend>
+                <div className="inline-flex rounded-xl bg-mist p-1" role="radiogroup" aria-label="طريقة عرض السعر">
+                  {(
+                    [
+                      ["per_person", "للشخص"],
+                      ["per_room", "للغرفة"],
+                      ["per_group", "للمجموعة"],
+                    ] as const
+                  ).map(([m, label]) => (
+                    <button key={m} type="button" role="radio" aria-checked={f.pricing_mode === m} onClick={() => set("pricing_mode", m)} className={`rounded-lg px-3.5 py-1.5 text-sm font-bold ${f.pricing_mode === m ? "bg-white text-brand-950 shadow-sm" : "text-muted"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+
+            {(["main", "fee", "option"] as const).map((kind) => {
+              const rows = f.items.filter((i) => i.kind === kind);
+              return (
+                <div key={kind}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm font-extrabold text-brand-950">
+                      {KIND_META[kind].label} <span className="font-semibold text-muted">· {KIND_META[kind].hint}</span>
+                    </p>
+                    <Button size="sm" variant="subtle" onClick={() => addItem(kind)}>
+                      <Plus className="size-4" aria-hidden="true" /> بند
+                    </Button>
+                  </div>
+                  {rows.length ? (
+                    <ul role="list" className="grid gap-2">
+                      {rows.map((it) => (
+                        <li key={it.key} className="grid items-end gap-2 rounded-xl border border-line p-3 md:grid-cols-[1.6fr_8rem_6rem_9rem_9rem_auto]">
+                          <Field label="الوصف" htmlFor={`it-l-${it.key}`}>
+                            <Input id={`it-l-${it.key}`} dir={ar ? "rtl" : "ltr"} value={it.label} onChange={(e) => setItem(it.key, { label: e.target.value })} />
+                          </Field>
+                          <Field label="الوحدة" htmlFor={`it-u-${it.key}`}>
+                            <Select id={`it-u-${it.key}`} value={it.unit} onChange={(e) => setItem(it.key, { unit: e.target.value as ItemUnit, quantity: Math.max(1, qtyFor(e.target.value as ItemUnit)) })}>
+                              {ITEM_UNITS.map((u) => (
+                                <option key={u} value={u}>
+                                  {UNIT_LABELS[u].ar}
+                                </option>
+                              ))}
+                            </Select>
+                          </Field>
+                          <Field label="الكمية" htmlFor={`it-q-${it.key}`}>
+                            <NumberInput id={`it-q-${it.key}`} min={1} value={it.quantity} onChange={(v) => setItem(it.key, { quantity: v ?? 1 })} />
+                          </Field>
+                          <Field label="سعر الوحدة" htmlFor={`it-p-${it.key}`}>
+                            <MoneyInput id={`it-p-${it.key}`} currency={f.currency} value={it.unit_price} onChange={(v) => setItem(it.key, { unit_price: v })} />
+                          </Field>
+                          <Field
+                            label={
+                              <span className="inline-flex items-center gap-1 text-accent-700">
+                                <Lock className="size-3" aria-hidden="true" /> التكلفة (داخلي)
+                              </span>
+                            }
+                            htmlFor={`it-c-${it.key}`}
+                          >
+                            <MoneyInput id={`it-c-${it.key}`} currency={f.currency} value={it.unit_cost} onChange={(v) => setItem(it.key, { unit_cost: v })} />
+                          </Field>
+                          <div className="flex items-center justify-between gap-2 md:flex-col md:items-end">
+                            <span className="num text-sm font-black text-brand-900">{money(it.quantity * (it.unit_price ?? 0))}</span>
+                            <Button size="sm" variant="ghost" className="text-danger" aria-label="حذف البند" onClick={() => set("items", f.items.filter((x) => x.key !== it.key))}>
+                              <Trash2 className="size-4" aria-hidden="true" />
+                            </Button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            })}
+
+            <div className="grid gap-3 rounded-xl border border-line bg-mist/50 p-4 sm:grid-cols-3">
+              <Field label="الخصم" htmlFor="q-disc-kind">
+                <Select id="q-disc-kind" value={f.discount_kind ?? ""} onChange={(e) => setF((x) => ({ ...x, discount_kind: (e.target.value || null) as DiscountKind | null, discount_value: 0 }))}>
+                  <option value="">بدون خصم</option>
+                  <option value="percent">نسبة مئوية</option>
+                  <option value="amount">مبلغ ثابت</option>
+                </Select>
+              </Field>
+              {f.discount_kind ? (
+                <>
+                  <Field label={f.discount_kind === "percent" ? "النسبة %" : "المبلغ"} htmlFor="q-disc-val" error={err("discount_value")}>
+                    {f.discount_kind === "percent" ? (
+                      <Input
+                        id="q-disc-val"
+                        type="number"
+                        dir="ltr"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={f.discount_value / 100}
+                        onChange={(e) => set("discount_value", Math.round(Number(e.target.value || 0) * 100))}
+                        className="num"
+                      />
+                    ) : (
+                      <MoneyInput id="q-disc-val" currency={f.currency} value={f.discount_value} onChange={(v) => set("discount_value", v ?? 0)} />
+                    )}
+                  </Field>
+                  <Field label="وصف الخصم" htmlFor="q-disc-label">
+                    <Input id="q-disc-label" dir={ar ? "rtl" : "ltr"} value={f.discount_label ?? ""} onChange={(e) => set("discount_label", e.target.value)} placeholder={ar ? "خصم الشركات" : "Corporate discount"} />
+                  </Field>
+                </>
+              ) : null}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <dl className="grid gap-2 rounded-xl border border-brand-100 bg-brand-50/50 p-4 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-muted">المجموع الأساسي</dt>
+                  <dd className="num font-bold">{money(totals.subtotal)}</dd>
+                </div>
+                {totals.fees ? (
+                  <div className="flex justify-between">
+                    <dt className="text-muted">تكاليف إضافية</dt>
+                    <dd className="num font-bold">{money(totals.fees)}</dd>
+                  </div>
+                ) : null}
+                {totals.discount ? (
+                  <div className="flex justify-between text-accent-700">
+                    <dt>الخصم</dt>
+                    <dd className="num font-bold">− {money(totals.discount)}</dd>
+                  </div>
+                ) : null}
+                <div className="flex justify-between border-t border-brand-100 pt-2 text-base">
+                  <dt className="font-extrabold text-brand-950">الإجمالي للعميل</dt>
+                  <dd className="num font-black text-brand-700">{money(totals.total)}</dd>
+                </div>
+                {totals.perPerson != null ? (
+                  <div className="flex justify-between text-xs">
+                    <dt className="text-muted">متوسط للشخص ({totals.pax})</dt>
+                    <dd className="num">{money(totals.perPerson)}</dd>
+                  </div>
+                ) : null}
+                {totals.optional ? (
+                  <div className="flex justify-between text-xs">
+                    <dt className="text-muted">خدمات اختيارية (خارج الإجمالي)</dt>
+                    <dd className="num">{money(totals.optional)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              <dl className="grid content-start gap-2 rounded-xl border border-dashed border-accent-300 bg-accent-50/50 p-4 text-sm" aria-label="ملخص داخلي">
+                <p className="flex items-center gap-1.5 text-xs font-black text-accent-700">
+                  <Lock className="size-3.5" aria-hidden="true" /> داخلي — لا يظهر في صفحة العميل أو ملف PDF
+                </p>
+                <div className="flex justify-between">
+                  <dt className="text-muted">التكلفة</dt>
+                  <dd className="num font-bold">{money(margin.cost)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted">هامش الربح</dt>
+                  <dd className={`num font-black ${margin.margin < 0 ? "text-danger" : "text-[#17663a]"}`}>
+                    {money(margin.margin)} <span className="text-xs">({margin.marginPct.toFixed(1)}%)</span>
+                  </dd>
+                </div>
+                {margin.missingCosts ? <p className="text-xs text-accent-700">{margin.missingCosts} بند بلا تكلفة مسجلة.</p> : null}
+              </dl>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="الصلاحية والملاحظات والشروط" />
+          <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <Field label="العرض صالح حتى" required htmlFor="q-valid" error={err("valid_until")} hint="بعد هذا التاريخ يصبح العرض منتهي الصلاحية ولا يمكن قبوله.">
+              <Input id="q-valid" type="date" dir="ltr" value={f.valid_until} onChange={(e) => set("valid_until", e.target.value)} />
+            </Field>
+            <div />
+            <Field label="ملاحظات للعميل" className="sm:col-span-2" htmlFor="q-notes">
+              <Textarea id="q-notes" dir={ar ? "rtl" : "ltr"} rows={3} value={f.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
+            </Field>
+            <Field label="الشروط والأحكام" className="sm:col-span-2" htmlFor="q-terms">
+              <Textarea id="q-terms" dir={ar ? "rtl" : "ltr"} rows={6} value={f.terms ?? ""} onChange={(e) => set("terms", e.target.value)} />
+            </Field>
+            <Field
+              label={
+                <span className="inline-flex items-center gap-1">
+                  <Lock className="size-3.5 text-accent-700" aria-hidden="true" /> ملاحظات داخلية
+                </span>
+              }
+              className="sm:col-span-2"
+              htmlFor="q-internal"
+              hint="للموظفين فقط."
+            >
+              <Textarea id="q-internal" rows={2} value={f.internal_notes ?? ""} onChange={(e) => set("internal_notes", e.target.value)} />
+            </Field>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="الصور" description="صورة الغلاف تظهر في رأس العرض. صور الفنادق تُضاف تلقائياً من بياناتها." />
+          <div className="grid gap-6 p-5">
+            <ImagePicker label="صورة الغلاف" max={1} value={f.cover ? [f.cover] : []} onChange={(v) => set("cover", v[0] ?? null)} />
+            <ImagePicker label="صور إضافية من الوجهة" max={12} value={f.gallery} onChange={(v) => set("gallery", v)} />
+          </div>
+        </Card>
+      </div>
+
+      <aside className="order-first grid content-start gap-4 xl:sticky xl:top-6 xl:order-none xl:max-h-[calc(100svh-3rem)] xl:overflow-y-auto">
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            {meta ? <QuoteStatusBadge status={meta.status} /> : <Badge tone="muted">عرض جديد</Badge>}
+            {meta ? (
+              <span className="num text-xs font-bold text-muted">
+                {meta.ref} {meta.revision > 1 ? `· نسخة ${meta.revision}` : ""}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-4 rounded-xl bg-brand-950 p-4 text-white">
+            <p className="text-xs text-white/60">{f.pricing_mode === "per_person" ? "السعر للشخص" : f.pricing_mode === "per_room" ? "السعر للغرفة" : "إجمالي المجموعة"}</p>
+            <p className="num mt-1 text-2xl font-black">{money(totals.headline.amount)}</p>
+            <p className="num mt-1 text-xs text-white/60">الإجمالي: {money(totals.total)}</p>
+          </div>
+          {meta && meta.status !== "draft" ? <p className="mt-3 text-xs leading-[1.7] text-muted">حفظ التعديلات على عرض مُرسل ينشئ نسخة جديدة، ويرى العميل التحديث على الرابط نفسه.</p> : null}
+          <Button variant="primary" className="mt-4 w-full" onClick={save} loading={pending}>
+            <Save className="size-4" aria-hidden="true" /> {meta ? "حفظ التعديلات" : "حفظ كمسودة"}
+          </Button>
+          {dirty && meta ? (
+            <p className="mt-2 text-center text-xs font-bold text-accent-700" role="status">
+              تغييرات غير محفوظة — احفظ قبل المعاينة أو الإرسال
+            </p>
+          ) : null}
+          {meta ? (
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-line pt-4">
+              <a href={asset(`/q/${meta.token}/`)} target="_blank" rel="noopener" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-line text-sm font-bold text-brand-900 hover:bg-brand-50">
+                <Eye className="size-4" aria-hidden="true" /> معاينة الصفحة
+              </a>
+              <a href={asset(`/q/${meta.token}/print/`)} target="_blank" rel="noopener" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-line text-sm font-bold text-brand-900 hover:bg-brand-50">
+                <FileDown className="size-4" aria-hidden="true" /> معاينة PDF
+              </a>
+              <a href={asset(`/q/${meta.token}/pdf/`)} className="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-bold text-brand-800 hover:bg-brand-100">
+                <Download className="size-4" aria-hidden="true" /> تنزيل ملف PDF
+              </a>
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-muted">بعد الحفظ تظهر خيارات المعاينة وملف PDF والإرسال.</p>
+          )}
+        </Card>
+        {meta ? <QuoteSharePanel meta={meta} contact={contact} company={company?.name ?? ""} title={f.title} locale={f.locale} canDelete={canDelete} dirty={dirty} /> : null}
+      </aside>
+
+      <Modal open={companyModal} onClose={() => setCompanyModal(false)} title="شركة جديدة" wide>
+        <CompanyEditor
+          compact
+          initial={{ id: null, name: "", name_en: null, industry: null, city: null, address: null, website: null, phone: null, email: null, notes: null }}
+          onSaved={(id) => {
+            setCompanyModal(false);
+            setF((x) => ({ ...x, company_id: id, contact_id: null }));
+            router.refresh();
+          }}
+        />
+      </Modal>
+    </div>
+  );
+}
