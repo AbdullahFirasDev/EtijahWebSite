@@ -7,27 +7,28 @@ import { mediaSrc, type MediaRef } from "@/lib/media";
 import { useToast } from "./Toaster";
 import { Button } from "./ui";
 
-async function uploadFile(file: File): Promise<MediaRef> {
+async function uploadFile(file: File, kind: "photo" | "logo"): Promise<MediaRef> {
   const body = new FormData();
   body.append("file", file);
+  body.append("kind", kind);
   const res = await fetch(asset("/api/staff/media"), { method: "POST", body });
   const data = (await res.json().catch(() => ({}))) as { media?: MediaRef; error?: string };
   if (!res.ok || !data.media) throw new Error(data.error ?? "تعذّر رفع الصورة.");
   return data.media;
 }
 
-function Library({ onPick, onClose }: { onPick: (m: MediaRef) => void; onClose: () => void }) {
+function Library({ onPick, onClose, kind }: { onPick: (m: MediaRef) => void; onClose: () => void; kind: "photo" | "logo" }) {
   const [items, setItems] = useState<MediaRef[] | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(asset("/api/staff/media"))
+    fetch(asset(`/api/staff/media?kind=${kind}`))
       .then((res) => res.json() as Promise<{ items?: MediaRef[] }>)
       .then((data) => alive && setItems(data.items ?? []))
       .catch(() => alive && setItems([]));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [kind]);
   return (
     <div role="dialog" aria-modal="true" aria-label="مكتبة الصور" className="fixed inset-0 z-[70] grid place-items-center p-4">
       <button type="button" aria-label="إغلاق" onClick={onClose} className="absolute inset-0 bg-brand-950/60 backdrop-blur-sm" />
@@ -69,10 +70,12 @@ interface ImagePickerProps {
   hint?: string;
   /** Shows a "cover" star on the first image. */
   coverFirst?: boolean;
+  /** Logos: smaller minimum size, transparency kept, shown uncropped. */
+  kind?: "photo" | "logo";
 }
 
 /** Upload (drag & drop or browse), pick from the library, reorder and remove images. */
-export function ImagePicker({ value, onChange, max = 12, label, hint, coverFirst }: ImagePickerProps) {
+export function ImagePicker({ value, onChange, max = 12, label, hint, coverFirst, kind = "photo" }: ImagePickerProps) {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(0);
@@ -101,7 +104,7 @@ export function ImagePicker({ value, onChange, max = 12, label, hint, coverFirst
     setBusy((n) => n + list.length);
     for (const file of list) {
       try {
-        add(await uploadFile(file));
+        add(await uploadFile(file, kind));
       } catch (e) {
         toast.error(`${file.name}: ${(e as Error).message}`);
       } finally {
@@ -128,7 +131,7 @@ export function ImagePicker({ value, onChange, max = 12, label, hint, coverFirst
         {value.map((m, i) => (
           <li key={m.id} className="group relative overflow-hidden rounded-xl bg-mist ring-1 ring-line">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={mediaSrc(m, 480)} alt="" className="aspect-[4/3] w-full object-cover" style={{ backgroundImage: `url(${m.blur})`, backgroundSize: "cover" }} />
+            <img src={mediaSrc(m, 480)} alt="" className={`aspect-[4/3] w-full ${kind === "logo" ? "bg-white object-contain p-3" : "object-cover"}`} style={kind === "logo" ? undefined : { backgroundImage: `url(${m.blur})`, backgroundSize: "cover" }} />
             {coverFirst && i === 0 ? (
               <span className="absolute start-2 top-2 inline-flex items-center gap-1 rounded-full bg-accent-500 px-2 py-0.5 text-[0.7rem] font-black text-brand-950">
                 <Star className="size-3" aria-hidden="true" /> الغلاف
@@ -203,7 +206,7 @@ export function ImagePicker({ value, onChange, max = 12, label, hint, coverFirst
         ) : null}
       </ul>
       {library ? (
-        <Library
+        <Library kind={kind}
           onClose={() => setLibrary(false)}
           onPick={(m) => {
             add(m);

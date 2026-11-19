@@ -7,10 +7,10 @@ export const metadata = { title: "الإعدادات" };
 
 export default async function SettingsPage() {
   await requireStaffPage("settings.manage");
-  const s = getSettings();
+  const s = await getSettings();
   return (
     <>
-      <PageHeader title="الإعدادات" description="العملات وإعدادات عروض أسعار الشركات." />
+      <PageHeader title="العملات وإعدادات النظام" description="العملات وإعدادات عروض أسعار الشركات." />
       <SettingsForm initial={{ ...s, currencies: [...s.currencies] }} />
     </>
   );

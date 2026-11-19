@@ -1,30 +1,37 @@
 import { Building2, Plus } from "lucide-react";
 import Link from "next/link";
-import { Card, EmptyState, Input, LinkButton, PageHeader, Table } from "@/components/staff/ui";
+import { Badge, Card, EmptyState, Input, LinkButton, PageHeader, Table } from "@/components/staff/ui";
+import { can } from "@/lib/permissions";
 import { timeAgo } from "@/lib/dates";
 import { requireStaffPage } from "@/server/auth/session";
 import { listCompanies } from "@/server/repo/companies";
 
 export const metadata = { title: "الشركات" };
 
-export default async function CompaniesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  await requireStaffPage("b2b.manage");
-  const { q } = await searchParams;
-  const companies = listCompanies(q?.slice(0, 80));
+export default async function CompaniesPage({ searchParams }: { searchParams: Promise<{ q?: string; archived?: string }> }) {
+  const staff = await requireStaffPage("b2b.view");
+  const { q, archived } = await searchParams;
+  const companies = await listCompanies({ q: q?.slice(0, 80), includeArchived: archived === "1" });
+  const canManage = can(staff.role, "b2b.manage");
   return (
     <>
       <PageHeader
-        title="الشركات وجهات الاتصال"
-        description="العملاء من الشركات والمؤسسات، جهات الاتصال فيها، وسجل عروض الأسعار المرسلة إليها. بيانات خاصة لا تظهر في الموقع."
+        title="الشركات B2B"
+        description="الشركات التي نتعامل معها: الهوية البصرية لملفاتها، جهات الاتصال، حسابات البوابة، الفنادق والأسعار المخصصة، العمولات وسجل العروض."
         actions={
-          <LinkButton href="/staff/companies/new/" variant="primary">
-            <Plus className="size-4" aria-hidden="true" /> شركة جديدة
-          </LinkButton>
+          canManage ? (
+            <LinkButton href="/staff/companies/new/" variant="primary">
+              <Plus className="size-4" aria-hidden="true" /> شركة جديدة
+            </LinkButton>
+          ) : null
         }
       />
       <Card>
         <form className="flex gap-2 border-b border-line p-4" role="search">
           <Input name="q" defaultValue={q} placeholder="ابحث باسم الشركة أو القطاع…" aria-label="بحث" className="max-w-sm" />
+          <label className="inline-flex items-center gap-2 text-sm font-bold text-muted">
+            <input type="checkbox" name="archived" value="1" defaultChecked={archived === "1"} className="size-4 accent-brand-600" /> المؤرشفة
+          </label>
           <button className="rounded-xl bg-brand-50 px-4 text-sm font-bold text-brand-700 hover:bg-brand-100">بحث</button>
         </form>
         {companies.length ? (
@@ -32,9 +39,10 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
             <thead>
               <tr>
                 <th>الشركة</th>
-                <th>القطاع</th>
                 <th>المدينة</th>
-                <th>جهات الاتصال</th>
+                <th>البوابة</th>
+                <th>المستخدمون</th>
+                <th>الفنادق</th>
                 <th>العروض</th>
                 <th>المقبولة</th>
                 <th>آخر عرض</th>
@@ -53,9 +61,10 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                       </p>
                     ) : null}
                   </td>
-                  <td>{c.industry ?? "—"}</td>
                   <td>{c.city ?? "—"}</td>
-                  <td className="num">{c.contacts}</td>
+                  <td>{c.status === "archived" ? <Badge tone="muted">مؤرشفة</Badge> : c.portal.enabled ? <Badge tone="success">مفعّلة</Badge> : <Badge tone="neutral">غير مفعّلة</Badge>}</td>
+                  <td className="num">{c.users}</td>
+                  <td className="num">{c.hotels}</td>
                   <td className="num">{c.quotes}</td>
                   <td className="num">{c.accepted}</td>
                   <td className="text-xs text-muted">{c.last_quote ? timeAgo(c.last_quote) : "—"}</td>

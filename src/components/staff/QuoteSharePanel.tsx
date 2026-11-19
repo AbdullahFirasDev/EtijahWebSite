@@ -40,10 +40,12 @@ interface Props {
   locale: "ar" | "en";
   canDelete: boolean;
   dirty: boolean;
+  /** Company quotes can also be published to the partner portal. */
+  portal?: boolean;
 }
 
 /** Share the quote link (WhatsApp, email, copy) and manage the link's validity. */
-export function QuoteSharePanel({ meta, contact, company, title, locale, canDelete, dirty }: Props) {
+export function QuoteSharePanel({ meta, contact, company, title, locale, canDelete, dirty, portal }: Props) {
   const origin = useSyncExternalStore(noopSubscribe, () => window.location.origin, () => "");
   const [expiry, setExpiry] = useState(meta.link_expires_at?.slice(0, 10) ?? "");
   const toast = useToast();
@@ -58,7 +60,7 @@ export function QuoteSharePanel({ meta, contact, company, title, locale, canDele
       ? `مرحباً ${greeting}،\nيسعدنا في الاتجاه للسياحة والسفر مشاركتكم عرض السعر الخاص بـ «${title}» (رقم ${meta.ref}).\nيمكنكم الاطلاع على التفاصيل الكاملة وتنزيل نسخة PDF والموافقة على العرض من الرابط:\n${url}`
       : `Dear ${greeting},\nEtijah Travel & Tourism is pleased to share our quotation for "${title}" (ref. ${meta.ref}).\nView the full details, download the PDF and approve the offer here:\n${url}`;
 
-  const send = (channel: "whatsapp" | "email" | "link") => {
+  const send = (channel: "whatsapp" | "email" | "link" | "portal") => {
     if (dirty) {
       toast.error("احفظ التعديلات أولاً قبل الإرسال.");
       return false;
@@ -110,6 +112,11 @@ export function QuoteSharePanel({ meta, contact, company, title, locale, canDele
           >
             <Mail className="size-4" aria-hidden="true" /> إرسال بالبريد الإلكتروني
           </a>
+          {portal && meta.status === "draft" ? (
+            <Button variant="primary" onClick={() => send("portal")} loading={pending} data-send-portal>
+              <Send className="size-4 rtl:-scale-x-100" aria-hidden="true" /> إتاحة في بوابة الشركة
+            </Button>
+          ) : null}
           {meta.status === "draft" ? (
             <Button size="sm" variant="ghost" onClick={() => send("link")} loading={pending}>
               <Send className="size-4 rtl:-scale-x-100" aria-hidden="true" /> تسجيل كمُرسل يدوياً

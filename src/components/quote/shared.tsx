@@ -1,7 +1,10 @@
 import { ExternalLink, MapPinned, Star } from "lucide-react";
+import type React from "react";
+import { LogoBadge } from "@/components/brand/Logo";
 import type { QuoteDict } from "@/content/quote";
 import type { Locale } from "@/content/site";
 import { formatDay } from "@/lib/dates";
+import { mediaSrc } from "@/lib/media";
 import { formatMoney } from "@/lib/money";
 import { BOARD_LABELS, UNIT_LABELS } from "@/lib/travel-labels";
 import type { QuoteView } from "@/server/repo/quotes";
@@ -111,5 +114,51 @@ export function PricingTable({ q, t, compact }: { q: QuoteView; t: QuoteDict; co
         </tr>
       </tfoot>
     </table>
+  );
+}
+
+/** Readable text colour (white or navy) on a brand background colour. */
+export function onColor(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? "#051c33" : "#ffffff";
+}
+
+/**
+ * CSS variables for the document identity. Etijah documents keep the site palette exactly;
+ * partner documents use the partner's two colours. The layout is the same for every company.
+ */
+export function brandStyle(brand: QuoteView["brand"]): React.CSSProperties {
+  if (brand.kind === "etijah") return { ["--qp" as string]: "var(--color-brand-950)", ["--qs" as string]: "var(--color-accent-500)", ["--qp-on" as string]: "#ffffff", ["--qs-on" as string]: "var(--color-brand-950)" };
+  return { ["--qp" as string]: brand.primary, ["--qs" as string]: brand.secondary, ["--qp-on" as string]: onColor(brand.primary), ["--qs-on" as string]: onColor(brand.secondary) };
+}
+
+/** Logo + name of the issuer (Etijah's mark, or the partner's uploaded logo). */
+export function BrandMark({ brand, locale, size = "md", idSuffix }: { brand: QuoteView["brand"]; locale: Locale; size?: "md" | "lg"; idSuffix: string }) {
+  const box = size === "lg" ? "size-[15mm]" : "size-11";
+  if (brand.kind === "etijah") {
+    return (
+      <div className="flex items-center gap-3">
+        <LogoBadge className={box} idSuffix={idSuffix} />
+        <div className="leading-tight">
+          <p className={`${size === "lg" ? "text-[15pt]" : "text-lg"} font-black`}>{locale === "ar" ? "الاتجاه" : "Etijah"}</p>
+          <p className={`${size === "lg" ? "text-[8.5pt]" : "text-xs"} font-bold opacity-85`}>{locale === "ar" ? "للسفر والسياحة" : "Travel & Tourism"}</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3" data-brand-name>
+      {brand.logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={mediaSrc(brand.logo, 480)} alt="" className={`${size === "lg" ? "h-[15mm] max-w-[45mm]" : "h-11 max-w-36"} w-auto rounded-md bg-white/95 object-contain p-1`} data-brand-logo />
+      ) : null}
+      <p className={`${size === "lg" ? "text-[15pt]" : "text-lg"} leading-tight font-black`}>{brand.name}</p>
+    </div>
   );
 }

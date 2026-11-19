@@ -10,10 +10,10 @@ export const dynamic = "force-dynamic";
 
 /** Staff-only preview of a program exactly as travelers will see it (drafts included). */
 export default async function ProgramPreviewPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ lang?: string }> }) {
-  await requireStaffPage("catalog.view");
+  await requireStaffPage("programs.view");
   const id = Number((await params).id);
   const locale = (await searchParams).lang === "en" ? "en" : "ar";
-  const p = getProgramPreview(id, locale);
+  const p = await getProgramPreview(id, locale);
   if (!p) notFound();
   return (
     <div dir={locale === "ar" ? "rtl" : "ltr"} lang={locale} className="bg-mist">

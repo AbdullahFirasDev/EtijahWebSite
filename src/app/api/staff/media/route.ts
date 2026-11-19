@@ -18,10 +18,11 @@ function sameOrigin(request: Request) {
 }
 
 /** Staff media library (recent uploads) for the image picker. */
-export async function GET() {
+export async function GET(request: Request) {
   const staff = await getStaff();
   if (!staff) return json({ error: "unauthorized" }, 401);
-  return json({ items: recentMedia(80) });
+  const kind = new URL(request.url).searchParams.get("kind");
+  return json({ items: await recentMedia(80, kind === "logo" ? "logo" : kind === "photo" ? "photo" : undefined) });
 }
 
 /** Image upload (multipart/form-data, field "file"). Returns the stored media reference. */
@@ -44,8 +45,9 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) return json({ error: "لم يتم اختيار ملف." }, 400);
 
   try {
-    const media = await storeImage(Buffer.from(await file.arrayBuffer()), file.name, staff.id);
-    audit(staff.id, "upload", "media", media.id);
+    const kind = form.get("kind") === "logo" ? "logo" : "photo";
+    const media = await storeImage(Buffer.from(await file.arrayBuffer()), file.name, staff.id, kind);
+    await audit(staff.id, "upload", "media", media.id, { kind });
     return json({ media });
   } catch (error) {
     if (error instanceof UploadError) return json({ error: error.message }, 422);

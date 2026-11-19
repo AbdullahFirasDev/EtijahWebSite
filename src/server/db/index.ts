@@ -1,84 +1,109 @@
 import "server-only";
-import { mkdirSync } from "node:fs";
-import path from "node:path";
-import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
-import { migrate } from "./migrate";
-
-/** SQLite file location. Override with DATABASE_PATH (absolute, or relative to the project root). */
-export const DATABASE_PATH = path.resolve(/*turbopackIgnore: true*/ process.env.DATABASE_PATH || path.join(process.cwd(), "data", "etijah.db"));
-
-type Param = SQLInputValue | boolean | undefined;
+import { attachDatabasePool } from "@vercel/functions";
+import { MongoClient, type ClientSession, type Collection, type Db, type Document } from "mongodb";
+import { assertTransactions, ensureSchema, mongoConfig, seedDefaults, type CollectionName } from "./schema";
 
 interface DbState {
-  conn: DatabaseSync;
-  statements: Map<string, StatementSync>;
-  depth: number;
+  client: MongoClient;
+  db: Db;
 }
 
-// Kept on globalThis so dev-mode hot reloads reuse one connection.
-const g = globalThis as unknown as { __etijahDb?: DbState };
+// Kept on globalThis so dev-mode hot reloads reuse one connection pool.
+const g = globalThis as unknown as { __etijahMongo?: Promise<DbState> };
 
-function state(): DbState {
-  if (!g.__etijahDb) {
-    mkdirSync(path.dirname(DATABASE_PATH), { recursive: true });
-    const conn = new DatabaseSync(DATABASE_PATH, { timeout: 5000 });
-    conn.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;");
-    migrate(conn);
-    g.__etijahDb = { conn, statements: new Map(), depth: 0 };
+async function connect(): Promise<DbState> {
+  const { uri, dbName } = mongoConfig();
+  const client = new MongoClient(uri, {
+    appName: "etijah-web",
+    // Small pools: on Vercel every function instance keeps its own pool (Atlas counts them all).
+    maxPoolSize: Number(process.env.MONGODB_POOL_SIZE) || 10,
+    maxIdleTimeMS: 60_000,
+    serverSelectionTimeoutMS: 10_000,
+    retryWrites: true,
+  });
+  // Lets Vercel Fluid Compute close idle connections before an instance is suspended.
+  attachDatabasePool(client);
+  await client.connect();
+  await assertTransactions(client);
+  const db = client.db(dbName);
+  await ensureSchema(db);
+  await seedDefaults(db);
+  return { client, db };
+}
+
+function state(): Promise<DbState> {
+  if (!g.__etijahMongo) {
+    g.__etijahMongo = connect().catch((error) => {
+      g.__etijahMongo = undefined;
+      throw error;
+    });
   }
-  return g.__etijahDb;
+  return g.__etijahMongo;
 }
 
-function statement(sql: string) {
-  const s = state();
-  let stmt = s.statements.get(sql);
-  if (!stmt) {
-    stmt = s.conn.prepare(sql);
-    s.statements.set(sql, stmt);
-  }
-  return stmt;
+export async function db(): Promise<Db> {
+  return (await state()).db;
 }
 
-// node:sqlite accepts neither booleans nor undefined.
-const bind = (params: Param[]): SQLInputValue[] =>
-  params.map((p) => (p === undefined ? null : typeof p === "boolean" ? (p ? 1 : 0) : p));
+/** Loosely typed document with this project's numeric `_id` (the default for untyped handles). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyDoc = { _id: number; [key: string]: any };
 
-/** Plain object copy (node:sqlite rows have a null prototype, which React can't serialise). */
-const plain = <T>(row: unknown): T => ({ ...(row as object) }) as T;
-
-export function get<T>(sql: string, ...params: Param[]): T | undefined {
-  const row = statement(sql).get(...bind(params));
-  return row ? plain<T>(row) : undefined;
+/** Typed collection handle. */
+export async function col<T extends Document = AnyDoc>(name: CollectionName): Promise<Collection<T>> {
+  return (await state()).db.collection<T>(name);
 }
 
-export function all<T>(sql: string, ...params: Param[]): T[] {
-  return statement(sql).all(...bind(params)).map((r) => plain<T>(r));
-}
-
-export function run(sql: string, ...params: Param[]) {
-  const r = statement(sql).run(...bind(params));
-  return { changes: Number(r.changes), id: Number(r.lastInsertRowid) };
-}
-
-/** Runs `fn` atomically. Nested calls join the outer transaction (via savepoints). */
-export function tx<T>(fn: () => T): T {
-  const s = state();
-  const name = `sp${s.depth}`;
-  s.conn.exec(s.depth === 0 ? "BEGIN IMMEDIATE" : `SAVEPOINT ${name}`);
-  s.depth++;
+/**
+ * Runs `fn` in a multi-document transaction (snapshot reads, majority writes). Retries on
+ * transient errors, so `fn` must only touch the database through the given session and must be
+ * safe to run more than once. Nested calls join the outer transaction.
+ */
+export async function tx<T>(fn: (session: ClientSession) => Promise<T>, outer?: ClientSession): Promise<T> {
+  if (outer?.inTransaction()) return fn(outer);
+  const { client } = await state();
+  const session = client.startSession();
   try {
-    const result = fn();
-    s.depth--;
-    s.conn.exec(s.depth === 0 ? "COMMIT" : `RELEASE ${name}`);
+    let result!: T;
+    await session.withTransaction(
+      async (s) => {
+        result = await fn(s);
+      },
+      { readConcern: { level: "snapshot" }, writeConcern: { w: "majority" }, readPreference: "primary" },
+    );
     return result;
-  } catch (error) {
-    s.depth--;
-    s.conn.exec(s.depth === 0 ? "ROLLBACK" : `ROLLBACK TO ${name}; RELEASE ${name}`);
-    throw error;
+  } finally {
+    await session.endSession();
   }
+}
+
+/**
+ * Next numeric id for `name` (atomic $inc). Called outside transactions on purpose: a counter
+ * inside a transaction would serialise every writer on one document. Gaps are harmless.
+ */
+export async function nextId(name: string): Promise<number> {
+  const counters = await col<{ _id: string; value: number }>("counters");
+  const r = await counters.findOneAndUpdate({ _id: name }, { $inc: { value: 1 } }, { upsert: true, returnDocument: "after" });
+  return r!.value;
 }
 
 export const now = () => new Date().toISOString();
 
-/** Builds `?, ?, ?` for IN (...) clauses. */
-export const placeholders = (n: number) => Array.from({ length: n }, () => "?").join(", ");
+/** Escapes user input for use inside a RegExp (search boxes). */
+export const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Case-insensitive "contains" filter for search boxes. */
+export const contains = (q: string) => ({ $regex: escapeRegex(q.trim()), $options: "i" });
+
+/** Strips `_id` → `id` for React props and action results (plain, serialisable objects). */
+export function withId<T extends { _id: unknown }>(doc: T): Omit<T, "_id"> & { id: T["_id"] } {
+  const { _id, ...rest } = doc;
+  return { ...rest, id: _id } as Omit<T, "_id"> & { id: T["_id"] };
+}
+
+/** Closes the pool (scripts and tests). */
+export async function closeDb() {
+  const s = g.__etijahMongo;
+  g.__etijahMongo = undefined;
+  if (s) await (await s.catch(() => null))?.client.close();
+}

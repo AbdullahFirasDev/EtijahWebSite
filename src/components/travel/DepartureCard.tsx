@@ -14,7 +14,7 @@ export function DepartureCard({ program, departure, locale }: { program: Program
   const back = dayParts(departure.returnDate, locale);
   const used = departure.seatsTotal - departure.seatsLeft;
   const pct = Math.min(100, Math.round((used / Math.max(1, departure.seatsTotal)) * 100));
-  const price = departure.price ?? program.priceFrom;
+  const price = program.priceFrom != null ? program.priceFrom + departure.priceSupplement : null;
 
   return (
     <article className="group relative flex w-[19rem] shrink-0 snap-start overflow-hidden rounded-[1.5rem] bg-white shadow-[0_18px_40px_-26px_rgb(5_28_51/0.5)] ring-1 ring-brand-950/5 sm:w-[22rem]">

@@ -10,5 +10,5 @@ export default async function QuotePage({ params }: PageProps<"/q/[token]">) {
   const access = await resolveQuoteAccess(token);
   // Unknown, draft, revoked or expired links all look the same: not found.
   if (!access || access.mode === "render") notFound();
-  return <QuoteWebView q={buildQuoteView(access.quote)} token={token} mode={access.mode} editorHref={access.mode === "staff" ? `/staff/quotes/${access.quote.id}/` : undefined} />;
+  return <QuoteWebView q={await buildQuoteView(access.quote)} token={token} mode={access.mode} editorHref={access.mode === "staff" ? `/staff/quotes/${access.quote._id}/` : undefined} />;
 }

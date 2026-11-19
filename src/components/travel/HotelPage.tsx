@@ -17,8 +17,8 @@ import { MediaImage } from "./MediaImage";
 import { OfferCard } from "./OfferCard";
 import { TravelShell } from "./TravelShell";
 
-export function hotelMetadata(locale: Locale, slug: string): Metadata {
-  const h = publicHotelBySlug(slug, locale);
+export async function hotelMetadata(locale: Locale, slug: string): Promise<Metadata> {
+  const h = await publicHotelBySlug(slug, locale);
   if (!h) return { robots: { index: false } };
   return travelPageMetadata({
     locale,
@@ -29,11 +29,11 @@ export function hotelMetadata(locale: Locale, slug: string): Metadata {
   });
 }
 
-export function HotelPage({ locale, slug }: { locale: Locale; slug: string }) {
-  const h = publicHotelBySlug(slug, locale);
+export async function HotelPage({ locale, slug }: { locale: Locale; slug: string }) {
+  const h = await publicHotelBySlug(slug, locale);
   if (!h) notFound();
   const t = travel[locale];
-  const programs = programsWithHotel(h.id, locale);
+  const programs = await programsWithHotel(h.id, locale);
   const [cover, ...rest] = h.images;
 
   return (

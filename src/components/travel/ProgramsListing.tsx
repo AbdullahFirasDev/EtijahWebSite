@@ -24,7 +24,7 @@ export function parseFilters(sp: Search) {
   const values = {
     q: str(sp.q),
     country: /^[A-Z]{2}$/.test(str(sp.country)) ? str(sp.country) : "",
-    kind: ["group", "package"].includes(str(sp.kind)) ? str(sp.kind) : "",
+    type: ["fixed", "custom"].includes(str(sp.type)) ? str(sp.type) : "",
     duration: ["short", "week", "long", "extended"].includes(str(sp.duration)) ? str(sp.duration) : "",
     month: /^\d{4}-\d{2}$/.test(str(sp.month)) ? str(sp.month) : "",
     budget: /^\d{1,9}$/.test(str(sp.budget)) ? str(sp.budget) : "",
@@ -33,7 +33,7 @@ export function parseFilters(sp: Search) {
   const filters: Filters = {
     q: values.q || undefined,
     country: values.country || undefined,
-    kind: (values.kind || undefined) as Filters["kind"],
+    type: (values.type || undefined) as Filters["type"],
     duration: (values.duration || undefined) as Filters["duration"],
     month: values.month || undefined,
     maxPrice: values.budget ? Number(values.budget) * 100 : undefined,
@@ -42,13 +42,12 @@ export function parseFilters(sp: Search) {
   return { values, filters };
 }
 
-export function ProgramsListing({ locale, searchParams }: { locale: Locale; searchParams: Search }) {
+export async function ProgramsListing({ locale, searchParams }: { locale: Locale; searchParams: Search }) {
   const t = travel[locale];
   const { values, filters } = parseFilters(searchParams);
-  const facets = publicFacets(locale);
-  const cards = listPublicPrograms(filters, locale);
+  const [facets, cards] = await Promise.all([publicFacets(locale), listPublicPrograms(filters, locale)]);
   const filtered = Object.entries(values).some(([k, v]) => v && k !== "sort");
-  const groups = filtered ? [] : upcomingDepartures(locale, 10);
+  const groups = filtered ? [] : await upcomingDepartures(locale, 10);
   const budgets = facets.currency && BUDGETS[facets.currency] ? BUDGETS[facets.currency] : [];
   // Client components receive plain data only (the dictionary also holds formatting functions).
   const filterText: Omit<typeof t.list, "results"> = { ...t.list };
@@ -76,7 +75,7 @@ export function ProgramsListing({ locale, searchParams }: { locale: Locale; sear
             <dl data-hero-fade style={{ ["--delay" as string]: "240ms" }} className="mt-10 flex flex-wrap gap-x-10 gap-y-4">
               {[
                 { icon: <Compass className="size-5" />, value: facets.total, label: t.list.stats.offers },
-                { icon: <UsersRound className="size-5" />, value: facets.groups, label: t.list.stats.groups },
+                { icon: <UsersRound className="size-5" />, value: facets.fixed, label: t.list.stats.groups },
                 { icon: <Globe2 className="size-5" />, value: facets.countries.length, label: t.list.stats.countries },
               ].map((s) => (
                 <div key={s.label} className="flex items-center gap-3">

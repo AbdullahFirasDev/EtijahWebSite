@@ -6,7 +6,7 @@ import { requireStaffPage } from "@/server/auth/session";
 export const metadata = { title: "حسابي" };
 
 export default async function AccountPage() {
-  const staff = await requireStaffPage();
+  const staff = await requireStaffPage("portal.view");
   return (
     <>
       <PageHeader title="حسابي" />

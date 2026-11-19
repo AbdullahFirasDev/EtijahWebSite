@@ -8,7 +8,7 @@ export const revalidate = 3600;
 
 // Sitemap URLs must be absolute; entries appear once NEXT_PUBLIC_SITE_URL is set.
 // Only public pages are listed: never staff pages or company quotes.
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (!site.url) return [];
   const pair = (path: string) => ({ ar: `${site.url}${path}`, en: `${site.url}/en${path}` });
   const home = { ar: `${site.url}/`, en: `${site.url}/en/` };
@@ -24,8 +24,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
   };
   try {
     add("/programs/", now, 0.9);
-    for (const p of publicProgramSlugs()) add(`/programs/${p.slug}/`, new Date(p.updated_at), 0.8);
-    for (const h of publicHotelSlugs()) add(`/hotels/${h.slug}/`, new Date(h.updated_at), 0.5);
+    for (const p of await publicProgramSlugs()) add(`/programs/${p.slug}/`, new Date(p.updated_at), 0.8);
+    for (const h of await publicHotelSlugs()) add(`/hotels/${h.slug}/`, new Date(h.updated_at), 0.5);
   } catch (error) {
     console.error("[sitemap]", error);
   }

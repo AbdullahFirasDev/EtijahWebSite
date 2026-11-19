@@ -54,7 +54,7 @@ export const optDay = z
   .refine((v) => v === null || isDay(v), { message: "التاريخ غير صالح." });
 
 export const id = z.number().int().positive();
-export const mediaId = z.string().uuid();
+export const mediaId = z.uuid();
 export const currency = z.string().refine(isCurrency, { message: "العملة غير مدعومة." });
 export const country = z.string().refine(isCountry, { message: "الدولة غير صالحة." });
 export const int = (min: number, max: number, label = "القيمة") =>
@@ -75,3 +75,29 @@ export function zodFailure(error: z.ZodError): { ok: false; error: string; field
 export function fail(error: string, fieldErrors?: Record<string, string>) {
   return { ok: false as const, error, fieldErrors };
 }
+
+/** #rrggbb colour (brand colours on partner documents). */
+export const hexColor = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/, "اللون يجب أن يكون بصيغة ‎#RRGGBB.").transform((v) => v.toLowerCase());
+
+/** Basis points (1% = 100), 0–100%. */
+export const basisPoints = z.number({ error: "النسبة غير صالحة." }).int().min(0, "النسبة لا تقل عن صفر.").max(10_000, "النسبة لا تتجاوز 100%.");
+
+/** Signed money in minor units (supplements, adjustments). */
+export const signedMoney = z.number().int().min(-100_000_000_000).max(100_000_000_000);
+
+/** Positive exchange rate with up to 6 decimals. */
+export const fxRate = z.number().positive("سعر الصرف يجب أن يكون أكبر من صفر.").max(1_000_000).nullable();
+
+export const email = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(200)
+  .refine((v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v), { message: "البريد الإلكتروني غير صالح." });
+
+/** HH:MM (24h). */
+export const optTime = z
+  .string()
+  .nullish()
+  .transform((v) => (v ? v.trim() : null))
+  .refine((v) => v === null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), { message: "الوقت غير صالح (HH:MM)." });

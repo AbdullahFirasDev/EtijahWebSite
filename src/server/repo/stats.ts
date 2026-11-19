@@ -1,48 +1,78 @@
 import "server-only";
 import { addDays, todayDay } from "@/lib/dates";
-import { all, get } from "../db";
+import { col } from "../db";
 import { listDeparturesStaff } from "./programs";
-import { expireDueQuotes, listQuotes } from "./quotes";
+import { expireDueQuotes } from "./quotes";
 
-export function dashboardStats() {
-  expireDueQuotes();
-  const n = (sql: string, ...p: (string | number)[]) => get<{ n: number }>(sql, ...p)!.n;
+export async function dashboardStats() {
+  await expireDueQuotes();
   const monthStart = `${todayDay().slice(0, 7)}-01`;
-  const quotes = listQuotes();
+  const [leads, programs, quotes, b2b] = await Promise.all([col("leads"), col("programs"), col("quotes"), col("b2b_requests")]);
+  const open = ["sent", "viewed", "changes_requested"];
 
-  const sentThisMonth = quotes.filter((q) => q.sent_at && q.sent_at >= monthStart);
-  const decided = quotes.filter((q) => q.status === "accepted" || q.status === "rejected");
-  const accepted = quotes.filter((q) => q.status === "accepted");
+  const [newLeads, openLeads, monthLeads, confirmed, customNew, published, drafts, views, openQuotes, sentThisMonth, accepted, decided, awaiting, expiringSoon, recentLeads, topPrograms, departures, b2bNew] =
+    await Promise.all([
+      leads.countDocuments({ status: "new" }),
+      leads.countDocuments({ status: { $in: ["new", "contacted", "quoted"] } }),
+      leads.countDocuments({ created_at: { $gte: monthStart } }),
+      leads.countDocuments({ status: "confirmed" }),
+      leads.countDocuments({ status: "new", kind: "custom" }),
+      programs.countDocuments({ status: "published" }),
+      programs.countDocuments({ status: "draft" }),
+      programs.aggregate<{ n: number }>([{ $group: { _id: null, n: { $sum: "$view_count" } } }]).toArray(),
+      quotes.countDocuments({ status: { $in: open } }),
+      quotes.countDocuments({ sent_at: { $gte: monthStart } }),
+      quotes.countDocuments({ status: "accepted" }),
+      quotes.countDocuments({ status: { $in: ["accepted", "rejected"] } }),
+      quotes
+        .find({ status: { $in: open } }, { projection: { ref: 1, title: 1, status: 1, valid_until: 1, company_id: 1, client: 1, audience: 1 } })
+        .sort({ valid_until: 1 })
+        .limit(6)
+        .toArray(),
+      quotes.countDocuments({ status: { $in: ["sent", "viewed"] }, valid_until: { $lte: addDays(todayDay(), 3) } }),
+      leads.find({}, { projection: { ref: 1, full_name: 1, program_title: 1, status: 1, created_at: 1, adults: 1, children: 1, kind: 1 } }).sort({ created_at: -1 }).limit(8).toArray(),
+      programs.find({ status: { $ne: "archived" } }, { projection: { title_ar: 1, view_count: 1, status: 1 } }).sort({ view_count: -1 }).limit(6).toArray(),
+      listDeparturesStaff({ scope: "upcoming" }),
+      b2b.countDocuments({ status: "new" }),
+    ]);
+
+  const leadCounts = new Map(
+    (await leads.aggregate<{ _id: number; n: number }>([{ $match: { program_id: { $in: topPrograms.map((p) => p._id) } } }, { $group: { _id: "$program_id", n: { $sum: 1 } } }]).toArray()).map((r) => [r._id, r.n]),
+  );
+  const companyNames = new Map(
+    (await (await col<{ _id: number; name: string }>("companies")).find({ _id: { $in: awaiting.map((q) => q.company_id).filter((x): x is number => !!x) } }).toArray()).map((c) => [c._id, c.name]),
+  );
 
   return {
-    leads: {
-      new: n("SELECT COUNT(*) AS n FROM leads WHERE status = 'new'"),
-      open: n("SELECT COUNT(*) AS n FROM leads WHERE status IN ('new', 'contacted', 'quoted')"),
-      thisMonth: n("SELECT COUNT(*) AS n FROM leads WHERE created_at >= ?", monthStart),
-      confirmed: n("SELECT COUNT(*) AS n FROM leads WHERE status = 'confirmed'"),
-    },
-    programs: {
-      published: n("SELECT COUNT(*) AS n FROM programs WHERE status = 'published'"),
-      drafts: n("SELECT COUNT(*) AS n FROM programs WHERE status = 'draft'"),
-      views: n("SELECT COALESCE(SUM(view_count), 0) AS n FROM programs"),
-    },
+    leads: { new: newLeads, open: openLeads, thisMonth: monthLeads, confirmed, customNew },
+    programs: { published, drafts, views: views[0]?.n ?? 0 },
     quotes: {
-      open: quotes.filter((q) => ["sent", "viewed", "changes_requested"].includes(q.status)).length,
-      sentThisMonth: sentThisMonth.length,
-      acceptanceRate: decided.length ? Math.round((accepted.length / decided.length) * 100) : null,
-      awaiting: quotes
-        .filter((q) => ["sent", "viewed", "changes_requested"].includes(q.status))
-        .sort((a, b) => a.valid_until.localeCompare(b.valid_until))
-        .slice(0, 6),
-      expiringSoon: quotes.filter((q) => ["sent", "viewed"].includes(q.status) && q.valid_until <= addDays(todayDay(), 3)).length,
+      open: openQuotes,
+      sentThisMonth,
+      acceptanceRate: decided ? Math.round((accepted / decided) * 100) : null,
+      awaiting: awaiting.map((q) => ({
+        id: q._id as number,
+        ref: q.ref as string,
+        title: q.title as string,
+        status: q.status as string,
+        valid_until: q.valid_until as string,
+        company_name: q.audience === "company" ? (companyNames.get(q.company_id as number) ?? "—") : ((q.client as { name?: string } | null)?.name ?? "—"),
+      })),
+      expiringSoon,
     },
-    recentLeads: all<{ id: number; ref: string; full_name: string; program_title: string; status: string; created_at: string; adults: number; children: number }>(
-      "SELECT id, ref, full_name, program_title, status, created_at, adults, children FROM leads ORDER BY created_at DESC LIMIT 8",
-    ),
-    topPrograms: all<{ id: number; title_ar: string; view_count: number; leads: number; status: string }>(
-      `SELECT p.id, p.title_ar, p.view_count, p.status, (SELECT COUNT(*) FROM leads l WHERE l.program_id = p.id) AS leads
-       FROM programs p WHERE p.status != 'archived' ORDER BY p.view_count DESC, leads DESC LIMIT 6`,
-    ),
-    departures: listDeparturesStaff({ scope: "upcoming" }).slice(0, 6),
+    b2bNew,
+    recentLeads: recentLeads.map((l) => ({
+      id: l._id as number,
+      ref: l.ref as string,
+      full_name: l.full_name as string,
+      program_title: l.program_title as string,
+      status: l.status as string,
+      created_at: l.created_at as string,
+      adults: l.adults as number,
+      children: l.children as number,
+      kind: l.kind as string,
+    })),
+    topPrograms: topPrograms.map((p) => ({ id: p._id as number, title_ar: p.title_ar as string, view_count: p.view_count as number, status: p.status as string, leads: leadCounts.get(p._id as number) ?? 0 })),
+    departures: departures.slice(0, 6),
   };
 }

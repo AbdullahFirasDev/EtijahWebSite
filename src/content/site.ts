@@ -54,10 +54,12 @@ export const site = {
 
   /**
    * Public production URL (e.g. https://www.example.com). Enables canonical URLs,
-   * hreflang alternates, Open Graph images and an absolute sitemap. Leave unset until
-   * the domain is live.
+   * hreflang alternates, Open Graph images and an absolute sitemap. Until it is set, Vercel's
+   * production domain is used (NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL, set by Vercel at build).
    */
-  url: process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || null,
+  url:
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") ||
+    (process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}` : null),
 } as const;
 
 export type ServiceId = "flights" | "visa" | "insurance" | "approvals" | "tours" | "other";

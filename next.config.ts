@@ -11,16 +11,25 @@ const privateHeaders = [
   { key: "Referrer-Policy", value: "no-referrer" },
 ];
 
+/** Files the PDF routes read at runtime (serverless Chromium and the footer's Arabic font). */
+const pdfRuntimeFiles = ["./node_modules/@sparticuz/chromium/bin/**", "./assets/fonts/**"];
+
 const nextConfig: NextConfig = {
-  // Runs as a Node.js server (`next start`): the travel programs, staff portal, B2B quotes
-  // and PDF generator need a database and server-side logic. Marketing pages stay prerendered.
+  // Deployed on Vercel (Node.js functions): the travel programs, staff portal, B2B quotes and PDF
+  // generator need MongoDB Atlas and server-side logic. Marketing pages stay prerendered.
   // `/en/` keeps its trailing slash, matching the URLs of the previous static site.
   trailingSlash: true,
   basePath,
   poweredByHeader: false,
   reactStrictMode: true,
   // Native / browser-driving packages are loaded from node_modules at runtime, not bundled.
-  serverExternalPackages: ["sharp", "playwright-core"],
+  serverExternalPackages: ["sharp", "playwright-core", "@sparticuz/chromium"],
+  // The PDF routes unpack Chromium from @sparticuz/chromium/bin at runtime and add an Arabic font
+  // for the page footer; neither is imported statically, so ship them with those routes only.
+  outputFileTracingIncludes: {
+    "/**/pdf": pdfRuntimeFiles,
+    "/**/reports/export": pdfRuntimeFiles,
+  },
   experimental: {
     // Arabic (/) and English (/en) use separate root layouts, so the 404 page is global.
     globalNotFound: true,

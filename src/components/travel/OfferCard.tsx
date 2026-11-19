@@ -35,8 +35,8 @@ export function OfferCard({ card, locale, priority, sizes = "(min-width: 1280px)
             {card.countries.map((c) => c.name).join(" · ")}
           </span>
           <span className="flex flex-col items-end gap-1.5">
-            <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${card.kind === "group" ? "bg-accent-500 text-brand-950" : "bg-brand-600 text-white"}`}>
-              {card.kind === "group" ? t.card.group : t.card.package}
+            <span className={`rounded-full px-3 py-1 text-xs font-extrabold ${card.type === "fixed" ? "bg-accent-500 text-brand-950" : "bg-brand-600 text-white"}`}>
+              {card.type === "fixed" ? t.card.fixed : t.card.custom}
             </span>
             {card.featured ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-brand-950/70 px-2.5 py-1 text-[0.7rem] font-bold text-accent-300 backdrop-blur-md">
@@ -92,7 +92,15 @@ export function OfferCard({ card, locale, priority, sizes = "(min-width: 1280px)
       </div>
       <div className="flex items-end justify-between gap-3 px-5 pt-4 pb-5">
         <div className="min-w-0">
-          {next && parts ? (
+          {card.type === "custom" ? (
+            <>
+              <p className="text-xs font-bold text-muted">{t.card.custom}</p>
+              <p className="mt-0.5 inline-flex items-center gap-1.5 text-sm font-extrabold text-brand-950">
+                <PlaneGlyph className="size-4 text-brand-500 rtl:-scale-x-100" /> {t.card.flexible}
+              </p>
+              {card.hotelStars.length ? <p className="mt-1 text-xs font-bold text-brand-700">{t.card.hotelStars(card.hotelStars)}</p> : null}
+            </>
+          ) : next && parts ? (
             <>
               <p className="text-xs font-bold text-muted">{t.card.nextDeparture}</p>
               <p className="mt-0.5 flex items-baseline gap-1.5 font-extrabold text-brand-950">
@@ -125,6 +133,8 @@ export function OfferCard({ card, locale, priority, sizes = "(min-width: 1280px)
               </p>
               {card.priceNote ? <p className="mt-1 max-w-[11rem] truncate text-[0.7rem] text-muted">{card.priceNote}</p> : null}
             </>
+          ) : card.type === "custom" ? (
+            <p className="text-sm font-extrabold text-brand-700">{t.card.onRequest}</p>
           ) : null}
         </div>
       </div>

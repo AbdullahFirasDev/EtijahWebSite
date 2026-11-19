@@ -1,23 +1,23 @@
-import { CircleAlert, FilePlus2, Inbox, MapPinned } from "lucide-react";
+import { CircleAlert, FilePlus2, Inbox, MapPinned, Ticket } from "lucide-react";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/staff/AutoRefresh";
 import { LeadStatusBadge, QuoteStatusBadge } from "@/components/staff/StatusBadge";
 import { Card, CardHeader, EmptyState, LinkButton, PageHeader, Stat, Table } from "@/components/staff/ui";
 import { formatDay, timeAgo } from "@/lib/dates";
-import { formatMoney } from "@/lib/money";
 import { can } from "@/lib/permissions";
-import type { LeadStatus } from "@/lib/travel-labels";
+import type { LeadStatus, QuoteStatus } from "@/lib/travel-labels";
 import { requireStaffPage } from "@/server/auth/session";
 import { dashboardStats } from "@/server/repo/stats";
 
 export const metadata = { title: "لوحة المتابعة" };
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
-  const staff = await requireStaffPage();
+  const staff = await requireStaffPage("portal.view");
   const { denied } = await searchParams;
-  const s = dashboardStats();
-  const b2b = can(staff.role, "b2b.manage");
-  const catalog = can(staff.role, "catalog.edit");
+  const s = await dashboardStats();
+  const b2b = can(staff.role, "quotes.manage");
+  const catalog = can(staff.role, "programs.edit");
+  const finance = can(staff.role, "tickets.view");
 
   return (
     <>
@@ -37,6 +37,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <FilePlus2 className="size-4" aria-hidden="true" /> عرض سعر لشركة
               </LinkButton>
             ) : null}
+            {finance ? (
+              <LinkButton href="/staff/tickets/new/" variant="outline">
+                <Ticket className="size-4" aria-hidden="true" /> تسجيل إصدار تذكرة
+              </LinkButton>
+            ) : null}
           </>
         }
       />
@@ -48,14 +53,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <Stat label="طلبات جديدة" value={s.leads.new} hint={`${s.leads.open} طلب قيد المتابعة`} tone="accent" href="/staff/requests/?status=new" />
+        <Stat label="طلبات جديدة" value={s.leads.new} hint={`${s.leads.open} قيد المتابعة · ${s.leads.customNew} برنامج خاص`} tone="accent" href="/staff/requests/?status=new" />
         <Stat label="طلبات هذا الشهر" value={s.leads.thisMonth} hint={`${s.leads.confirmed} حجز مؤكد إجمالاً`} href="/staff/requests/" />
         <Stat label="برامج منشورة" value={s.programs.published} hint={`${s.programs.drafts} مسودة · ${s.programs.views} مشاهدة`} href="/staff/programs/" />
         {b2b ? (
           <Stat
             label="عروض الشركات المفتوحة"
             value={s.quotes.open}
-            hint={s.quotes.acceptanceRate == null ? `${s.quotes.sentThisMonth} أُرسل هذا الشهر` : `نسبة القبول ${s.quotes.acceptanceRate}%`}
+            hint={`${s.b2bNew} طلب شركة جديد · ${s.quotes.acceptanceRate == null ? `${s.quotes.sentThisMonth} أُرسل هذا الشهر` : `القبول ${s.quotes.acceptanceRate}%`}`}
             href="/staff/quotes/?status=open"
           />
         ) : (
@@ -95,7 +100,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
         {b2b ? (
           <Card aria-labelledby="awaiting">
-            <CardHeader id="awaiting" title="عروض بانتظار رد الشركات" description={s.quotes.expiringSoon ? `${s.quotes.expiringSoon} عرض تنتهي صلاحيته خلال 3 أيام` : undefined} />
+            <CardHeader id="awaiting" title="عروض بانتظار الرد" description={s.quotes.expiringSoon ? `${s.quotes.expiringSoon} عرض تنتهي صلاحيته خلال 3 أيام` : undefined} />
             {s.quotes.awaiting.length ? (
               <ul role="list" className="divide-y divide-line">
                 {s.quotes.awaiting.map((q) => (
@@ -108,8 +113,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         </span>
                       </span>
                       <span className="flex flex-col items-end gap-1">
-                        <QuoteStatusBadge status={q.status} />
-                        <span className="num text-xs font-bold text-brand-900">{formatMoney(q.total, q.currency, "ar")}</span>
+                        <QuoteStatusBadge status={q.status as QuoteStatus} />
                       </span>
                     </Link>
                   </li>
@@ -156,7 +160,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Card>
 
         <Card aria-labelledby="upcoming-groups">
-          <CardHeader id="upcoming-groups" title="الكروبات القادمة" actions={<LinkButton href="/staff/groups/" size="sm">كل المواعيد</LinkButton>} />
+          <CardHeader id="upcoming-groups" title="مواعيد البرامج العامة القادمة" actions={<LinkButton href="/staff/groups/" size="sm">كل المواعيد</LinkButton>} />
           {s.departures.length ? (
             <ul role="list" className="divide-y divide-line">
               {s.departures.map((d) => {
@@ -182,7 +186,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               })}
             </ul>
           ) : (
-            <EmptyState title="لا توجد مواعيد قادمة" text="أضف مواعيد الانطلاق من محرر البرنامج (قسم الكروبات)." />
+            <EmptyState title="لا توجد مواعيد قادمة" text="أضف مواعيد السفر من معالج البرنامج (خطوة الطيران والتواريخ)." />
           )}
         </Card>
       </div>

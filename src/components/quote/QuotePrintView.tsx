@@ -1,6 +1,5 @@
 import { Check, Download, Globe, MapPin, Phone, Printer, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { LogoBadge } from "@/components/brand/Logo";
 import { WhatsAppIcon } from "@/components/ui/icons";
 import { quoteDict } from "@/content/quote";
 import { site, whatsappUrl } from "@/content/site";
@@ -9,7 +8,7 @@ import { daysBetween, formatDay } from "@/lib/dates";
 import { mediaSrc } from "@/lib/media";
 import { formatMoney } from "@/lib/money";
 import type { QuoteView } from "@/server/repo/quotes";
-import { boardText, datesText, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
+import { boardText, BrandMark, brandStyle, datesText, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
 
 function H2({ children }: { children: ReactNode }) {
   return (
@@ -32,9 +31,10 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
   const options = q.items.filter((i) => i.kind === "option");
   const cover = q.cover ?? q.hotels.find((h) => h.images[0])?.images[0] ?? null;
   const gallery = q.gallery.slice(0, 6);
+  const etijah = q.brand.kind === "etijah";
 
   return (
-    <div className="quote-print bg-white text-ink">
+    <div className="quote-print bg-white text-ink" style={brandStyle(q.brand)} data-brand={q.brand.kind}>
       <style>{`
         @page { size: A4; margin: 14mm 0 16mm; }
         @page :first { margin: 0; }
@@ -73,21 +73,17 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
 
       {/* ------------------------------------------------------------ Cover page */}
       <section className="cover relative flex flex-col overflow-hidden [break-after:page]">
-        <div className="relative h-[58%] overflow-hidden bg-brand-950">
+        <div className="relative h-[58%] overflow-hidden bg-[var(--qp)]">
           {cover ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={mediaSrc(cover, 1600)} alt="" loading="eager" className="h-full w-full object-cover" />
           ) : null}
           <div aria-hidden="true" className="absolute inset-0 bg-linear-to-b from-brand-950/70 via-brand-950/10 to-brand-950/80" />
           <div className="absolute inset-x-0 top-0 flex items-center justify-between px-[14mm] pt-[12mm]">
-            <div className="flex items-center gap-3 text-white">
-              <LogoBadge className="size-[15mm]" idSuffix="pdf" />
-              <div className="leading-tight">
-                <p className="text-[15pt] font-black">{ar ? "الاتجاه" : "Etijah"}</p>
-                <p className="text-[8.5pt] font-bold text-white/85">{ar ? "للسفر والسياحة" : "Travel & Tourism"}</p>
-              </div>
+            <div className="text-white">
+              <BrandMark brand={q.brand} locale={q.locale} size="lg" idSuffix="pdf" />
             </div>
-            <span className="rounded-full bg-accent-500 px-4 py-1.5 text-[10pt] font-extrabold text-brand-950">{t.docTitle}</span>
+            <span className="rounded-full bg-[var(--qs)] px-4 py-1.5 text-[10pt] font-extrabold text-[var(--qs-on)]">{t.docTitle}</span>
           </div>
           <div className="absolute inset-x-0 bottom-0 px-[14mm] pb-[10mm] text-white">
             {q.destination ? (
@@ -102,18 +98,22 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
           <div className="flex items-start justify-between gap-6">
             <div>
               <p className="text-[9pt] font-bold text-muted">{t.preparedFor}</p>
-              <p className="text-[19pt] leading-tight font-black text-brand-950">{q.company.name}</p>
-              {q.contact ? (
+              <p className="text-[19pt] leading-tight font-black text-brand-950" data-recipient>{q.recipient.name}</p>
+              {q.recipient.contact ? (
                 <p className="mt-1 text-[10pt] text-muted">
-                  {t.attention}: <span className="font-bold text-ink">{q.contact.name}</span>
-                  {q.contact.position ? ` — ${q.contact.position}` : ""}
+                  {t.attention}: <span className="font-bold text-ink">{q.recipient.contact}</span>
+                </p>
+              ) : null}
+              {q.beneficiary ? (
+                <p className="mt-1 text-[10pt] text-muted" data-beneficiary>
+                  {t.beneficiary}: <span className="font-bold text-ink">{[q.beneficiary.name, q.beneficiary.note].filter(Boolean).join(" — ")}</span>
                 </p>
               ) : null}
             </div>
-            <div className="shrink-0 rounded-[5mm] bg-brand-950 px-[7mm] py-[5mm] text-white">
-              <p className="text-[8.5pt] font-bold text-accent-300">{t.headline[q.totals.headline.basis]}</p>
+            <div className="shrink-0 rounded-[5mm] bg-[var(--qp)] px-[7mm] py-[5mm] text-[var(--qp-on)]">
+              <p className="text-[8.5pt] font-bold opacity-80">{t.headline[q.totals.headline.basis]}</p>
               <p className="num text-[21pt] leading-tight font-black">{m(q.totals.headline.amount)}</p>
-              <p className="num text-[8.5pt] text-white/70">
+              <p className="num text-[8.5pt] opacity-70">
                 {t.total}: {m(q.totals.total)}
               </p>
             </div>
@@ -137,13 +137,15 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
           </dl>
           <div className="mt-auto flex items-end justify-between gap-6 border-t border-line pt-[5mm] text-[8.5pt] text-muted">
             <div>
-              <p className="font-extrabold text-brand-950">{ar ? site.nameAr : site.nameEn}</p>
-              <p>{ar ? `${site.address.streetAr}، ${site.address.cityAr}` : `${site.address.streetEn}, ${site.address.cityEn}`}</p>
+              <p className="font-extrabold text-brand-950">{q.brand.name}</p>
+              {q.brand.contactLines.slice(1).map((l) => (
+                <p key={l}>{l}</p>
+              ))}
             </div>
             <div className="text-end">
-              <a href={`tel:${site.phone.e164}`} className="num block font-bold text-brand-800" dir="ltr">
-                {site.phone.display}
-              </a>
+              <p className="num block font-bold text-brand-800" dir="ltr">
+                {q.brand.contactLines[0] ?? ""}
+              </p>
               {q.preparedBy ? (
                 <p>
                   {t.preparedBy}: {q.preparedBy}
@@ -302,10 +304,10 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
               </table>
             </div>
           ) : null}
-          <div className="avoid mt-[5mm] flex items-center justify-between rounded-[4mm] bg-brand-950 px-[6mm] py-[4mm] text-white">
+          <div className="avoid mt-[5mm] flex items-center justify-between rounded-[4mm] bg-[var(--qp)] px-[6mm] py-[4mm] text-[var(--qp-on)]">
             <div>
-              <p className="text-[9pt] font-bold text-accent-300">{t.total}</p>
-              <p className="text-[8pt] text-white/70">
+              <p className="text-[9pt] font-bold opacity-80">{t.total}</p>
+              <p className="text-[8pt] opacity-70">
                 {t.validUntil}: {formatDay(q.validUntil, q.locale)}
               </p>
             </div>
@@ -314,6 +316,16 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
           <div className="avoid mt-[4mm] rounded-[4mm] border-2 border-brand-100 px-[6mm] py-[4mm]">
             <p className="text-[11pt] font-extrabold text-brand-950">{t.contact}</p>
             <ul className="mt-2 grid grid-cols-2 gap-x-[6mm] gap-y-1.5 text-[9pt]">
+              {!etijah
+                ? q.brand.contactLines.map((l) => (
+                    <li key={l} className="flex items-center gap-2">
+                      <Phone className="size-[4mm] shrink-0 text-brand-600" aria-hidden="true" />
+                      <span className="font-bold text-brand-800">{l}</span>
+                    </li>
+                  ))
+                : null}
+              {etijah ? (
+              <>
               <li className="flex items-center gap-2">
                 <Phone className="size-[4mm] shrink-0 text-brand-600" aria-hidden="true" />
                 <a href={`tel:${site.phone.e164}`} className="num font-bold text-brand-800 underline" dir="ltr">
@@ -332,6 +344,8 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
                   {ar ? `${site.address.streetAr}، ${site.address.cityAr}` : `${site.address.streetEn}, ${site.address.cityEn}`}
                 </a>
               </li>
+              </>
+              ) : null}
               {onlineUrl ? (
                 <li className="flex items-center gap-2">
                   <Globe className="size-[4mm] shrink-0 text-brand-600" aria-hidden="true" />

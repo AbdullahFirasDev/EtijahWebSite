@@ -1,31 +1,31 @@
-// Database and staff-account CLI.
-//   npm run db:migrate
+// Database and staff-account CLI (MongoDB).
+//   npm run db:init                      create collections and indexes, seed reference data
+//   npm run db:check                     connection, replica set (transactions) and counts
+//   npm run db:seed-geo [-- --dry-run] [-- --country TR,AE]
+//                                        add the reference cities/tourist areas (src/data/destinations.ts)
 //   npm run staff:list
 //   npm run staff:create -- --email you@example.com --name "الاسم" --role admin [--password "..."]
 //   npm run staff:reset-password -- --email you@example.com [--password "..."] [--activate]
 //
-// Reads .env files exactly like Next.js, so it always uses the same DATABASE_PATH as the server
-// (default data/etijah.db). Without --password, a strong password is generated and printed once.
-// Passwords are stored only as scrypt hashes: a lost password cannot be recovered, only reset.
+// Reads .env files exactly like Next.js, so it always uses the same MONGODB_URI / MONGODB_DB_NAME
+// as the server. Without --password, a strong password is generated and printed once. Passwords
+// are stored only as scrypt hashes: a lost password cannot be recovered, only reset.
 import { randomInt } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { DatabaseSync } from "node:sqlite";
 import nextEnv from "@next/env";
-import { migrate } from "../src/server/db/migrate.ts";
+import { MongoClient } from "mongodb";
 import { hashPassword, passwordProblem } from "../src/server/auth/password.ts";
+import { GEO_COUNTRIES } from "../src/data/destinations.ts";
+import { importGeo } from "../src/server/db/geo.ts";
+import { assertTransactions, COLLECTIONS, ensureSchema, mongoConfig, seedDefaults } from "../src/server/db/schema.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 process.chdir(root);
-// Values already in the environment win (tests pass their own DATABASE_PATH).
+// Values already in the environment win (tests pass their own MONGODB_URI / MONGODB_DB_NAME).
 nextEnv.loadEnvConfig(root, process.env.NODE_ENV === "development", { info: () => {}, error: console.error });
 
-const file = path.resolve(process.env.DATABASE_PATH || path.join(root, "data", "etijah.db"));
-mkdirSync(path.dirname(file), { recursive: true });
-const db = new DatabaseSync(file, { timeout: 5000 });
-db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
-
+const ROLES = ["admin", "tourism_manager", "sales", "accountant", "content"];
 const [command, ...rest] = process.argv.slice(2);
 const { values } = parseArgs({
   args: rest,
@@ -35,23 +35,18 @@ const { values } = parseArgs({
     role: { type: "string" },
     password: { type: "string" },
     activate: { type: "boolean" },
+    "dry-run": { type: "boolean" },
+    country: { type: "string" },
   },
   strict: true,
 });
 
-const applied = migrate(db, path.join(root, "db", "migrations"));
-if (applied.length) console.log(`Applied migrations: ${applied.join(", ")}`);
-console.log(`Database: ${file}`);
-
 /** Easy to read and type: 4 groups of 4 from an alphabet without look-alikes (≈ 79 bits). */
 function generatePassword() {
-  const letters = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
-  const digits = "23456789";
-  const all = letters + digits;
+  const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   for (;;) {
-    const groups = Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => all[randomInt(all.length)]).join(""));
-    const pw = groups.join("-");
-    if (!passwordProblem(pw)) return pw; // guarantees letters and digits
+    const pw = Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("")).join("-");
+    if (!passwordProblem(pw)) return pw;
   }
 }
 
@@ -62,8 +57,6 @@ function choosePassword() {
   return password;
 }
 
-const findUser = (email) => db.prepare("SELECT id, name, email, role, active FROM staff_users WHERE email = ?").get(email);
-
 function printCredentials(email, password, generated) {
   console.log(`\n  Login:    /staff/login/`);
   console.log(`  Email:    ${email}`);
@@ -72,71 +65,112 @@ function printCredentials(email, password, generated) {
 }
 
 async function main() {
-  switch (command) {
-    case "migrate":
-      console.log("Database ready.");
-      return;
+  const { uri, dbName } = mongoConfig();
+  const client = new MongoClient(uri, { appName: "etijah-cli", serverSelectionTimeoutMS: 10_000 });
+  await client.connect();
+  try {
+    await assertTransactions(client);
+    const db = client.db(dbName);
+    await ensureSchema(db);
+    await seedDefaults(db);
+    console.log(`Database: ${dbName} @ ${uri.replace(/\/\/[^@]*@/, "//***@")}`);
+    const users = db.collection("staff_users");
 
-    case "list-staff": {
-      const rows = db.prepare("SELECT id, name, email, role, active, last_login_at FROM staff_users ORDER BY id").all();
-      if (!rows.length) {
-        console.log('No staff accounts yet. Create one with: npm run staff:create -- --email you@example.com --name "الاسم" --role admin');
+    switch (command) {
+      case "init":
+        console.log("Collections and indexes are ready.");
+        return;
+
+      case "check": {
+        const hello = await client.db("admin").command({ hello: 1 });
+        console.log(`Replica set: ${hello.setName ?? "(sharded cluster)"} · primary: ${hello.primary ?? hello.me ?? "?"}`);
+        for (const name of COLLECTIONS) console.log(`  ${name.padEnd(18)} ${await db.collection(name).estimatedDocumentCount()}`);
+        const migrated = await db.collection("migrations").findOne({ _id: "sqlite-import" });
+        console.log(migrated ? `SQLite import: ${migrated.at} from ${migrated.source}` : "SQLite import: not run on this database");
         return;
       }
-      for (const u of rows) console.log(`#${u.id}  ${u.email}  ${u.role}${u.active ? "" : "  (deactivated)"}  ${u.name}  last login: ${u.last_login_at ?? "never"}`);
-      return;
-    }
 
-    case "create-staff": {
-      const email = values.email?.trim().toLowerCase();
-      const name = values.name?.trim();
-      const role = values.role ?? "admin";
-      if (!email || !name) throw new Error('Usage: create-staff --email x@y.z --name "Name" --role admin|sales|content [--password ...]');
-      if (!["admin", "sales", "content"].includes(role)) throw new Error("role must be admin, sales or content");
-      if (findUser(email)) throw new Error(`An account with ${email} already exists. To set a new password: npm run staff:reset-password -- --email ${email}`);
-      const password = choosePassword();
-      const now = new Date().toISOString();
-      db.prepare("INSERT INTO staff_users (name, email, password_hash, role, active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)").run(
-        name,
-        email,
-        await hashPassword(password),
-        role,
-        now,
-        now,
-      );
-      console.log(`Created ${role} account for ${email}`);
-      printCredentials(email, password, !values.password);
-      return;
-    }
+      case "list-staff": {
+        const rows = await users.find({}, { projection: { password_hash: 0 } }).sort({ _id: 1 }).toArray();
+        if (!rows.length) {
+          console.log('No staff accounts yet. Create one with: npm run staff:create -- --email you@example.com --name "الاسم" --role admin');
+          return;
+        }
+        for (const u of rows) console.log(`#${u._id}  ${u.email}  ${u.role}${u.active ? "" : "  (deactivated)"}  ${u.name}  last login: ${u.last_login_at ?? "never"}`);
+        return;
+      }
 
-    case "reset-password": {
-      const email = values.email?.trim().toLowerCase();
-      if (!email) throw new Error("Usage: reset-password --email x@y.z [--password ...] [--activate]   (see accounts: npm run staff:list)");
-      const user = findUser(email);
-      if (!user) throw new Error(`No account for ${email}. See the accounts with: npm run staff:list`);
-      const password = choosePassword();
-      const now = new Date().toISOString();
-      // Only the password changes; the account, its role and all other data stay as they are.
-      // Failed-login lockout is cleared and existing sessions are signed out.
-      db.prepare(
-        "UPDATE staff_users SET password_hash = ?, failed_logins = 0, locked_until = NULL, active = CASE WHEN ? THEN 1 ELSE active END, updated_at = ? WHERE id = ?",
-      ).run(await hashPassword(password), values.activate ? 1 : 0, now, user.id);
-      db.prepare("DELETE FROM staff_sessions WHERE user_id = ?").run(user.id);
-      db.prepare("INSERT INTO audit_log (user_id, action, entity, entity_id, meta, created_at) VALUES (NULL, 'reset_password_cli', 'user', ?, NULL, ?)").run(String(user.id), now);
-      console.log(`Password reset for ${email} (${user.role})`);
-      if (!user.active && !values.activate) console.log("Note: this account is deactivated. Add --activate to enable it.");
-      printCredentials(email, password, !values.password);
-      return;
-    }
+      case "create-staff": {
+        const email = values.email?.trim().toLowerCase();
+        const name = values.name?.trim();
+        const role = values.role ?? "admin";
+        if (!email || !name) throw new Error(`Usage: create-staff --email x@y.z --name "Name" --role ${ROLES.join("|")} [--password ...]`);
+        if (!ROLES.includes(role)) throw new Error(`role must be one of: ${ROLES.join(", ")}`);
+        if (await users.findOne({ email })) throw new Error(`An account with ${email} already exists. To set a new password: npm run staff:reset-password -- --email ${email}`);
+        const password = choosePassword();
+        const now = new Date().toISOString();
+        const counter = await db.collection("counters").findOneAndUpdate({ _id: "staff_users" }, { $inc: { value: 1 } }, { upsert: true, returnDocument: "after" });
+        await users.insertOne({
+          _id: counter.value,
+          name,
+          email,
+          password_hash: await hashPassword(password),
+          role,
+          active: true,
+          failed_logins: 0,
+          locked_until: null,
+          last_login_at: null,
+          created_at: now,
+          updated_at: now,
+        });
+        await db.collection("audit_log").insertOne({ user_id: null, actor: "cli", action: "create_cli", entity: "user", entity_id: String(counter.value), meta: { role }, created_at: now });
+        console.log(`Created ${role} account for ${email}`);
+        printCredentials(email, password, !values.password);
+        return;
+      }
 
-    default:
-      console.log("Commands: migrate | list-staff | create-staff | reset-password");
+      case "reset-password": {
+        const email = values.email?.trim().toLowerCase();
+        if (!email) throw new Error("Usage: reset-password --email x@y.z [--password ...] [--activate]   (see accounts: npm run staff:list)");
+        const user = await users.findOne({ email });
+        if (!user) throw new Error(`No account for ${email}. See the accounts with: npm run staff:list`);
+        const password = choosePassword();
+        const now = new Date().toISOString();
+        // Only the password changes; the account, its role and all other data stay as they are.
+        await users.updateOne(
+          { _id: user._id },
+          { $set: { password_hash: await hashPassword(password), failed_logins: 0, locked_until: null, updated_at: now, ...(values.activate ? { active: true } : {}) } },
+        );
+        await db.collection("sessions").deleteMany({ realm: "staff", user_id: user._id });
+        await db.collection("audit_log").insertOne({ user_id: null, actor: "cli", action: "reset_password_cli", entity: "user", entity_id: String(user._id), meta: null, created_at: now });
+        console.log(`Password reset for ${email} (${user.role})`);
+        if (!user.active && !values.activate) console.log("Note: this account is deactivated. Add --activate to enable it.");
+        printCredentials(email, password, !values.password);
+        return;
+      }
+
+      case "seed-geo": {
+        const countries = values.country ? values.country.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean) : undefined;
+        const dryRun = !!values["dry-run"];
+        const r = await importGeo(db, GEO_COUNTRIES, { countries, dryRun });
+        for (const c of r.countries) console.log(`  ${c.code}  +${String(c.added).padStart(3)} new · ${String(c.completed).padStart(3)} completed · ${String(c.existing).padStart(3)} already there`);
+        console.log(`${dryRun ? "[dry run] would add" : "Added"} ${r.added} destinations, completed ${r.completed} existing ones (kind / airport), ${r.existing} unchanged.`);
+        if (!dryRun && (r.added || r.completed)) {
+          await db.collection("audit_log").insertOne({ user_id: null, actor: "cli", action: "import_geo_cli", entity: "destination", entity_id: null, meta: { added: r.added, completed: r.completed, countries: countries ?? "all" }, created_at: new Date().toISOString() });
+          await db.collection("migrations").updateOne({ _id: "geo-reference" }, { $set: { at: new Date().toISOString(), added: r.added } }, { upsert: true });
+        }
+        return;
+      }
+
+      default:
+        console.log("Commands: init | check | seed-geo | list-staff | create-staff | reset-password");
+    }
+  } finally {
+    await client.close();
   }
 }
 
-main()
-  .catch((error) => {
-    console.error(`Error: ${error.message}`);
-    process.exitCode = 1;
-  })
-  .finally(() => db.close());
+main().catch((error) => {
+  console.error(`Error: ${error.message}`);
+  process.exitCode = 1;
+});

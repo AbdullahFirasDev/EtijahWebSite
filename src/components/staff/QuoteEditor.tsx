@@ -12,7 +12,9 @@ import {
   Lock,
   Plus,
   Save,
+  Tag,
   Trash2,
+  UserRound,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -21,9 +23,10 @@ import { addDays, daysBetween } from "@/lib/dates";
 import type { MediaRef } from "@/lib/media";
 import { CURRENCIES, formatMoney, type CurrencyCode } from "@/lib/money";
 import { quoteMargin, quoteTotals, type DiscountKind, type ItemKind, type ItemUnit, type PricingMode } from "@/lib/quote-math";
-import { BOARD_LABELS, BOARDS, ITEM_UNITS, UNIT_LABELS, type Board, type QuoteStatus } from "@/lib/travel-labels";
+import { BOARD_LABELS, BOARDS, ITEM_UNITS, RATE_BASIS_LABELS, UNIT_LABELS, type Board, type QuoteStatus } from "@/lib/travel-labels";
+import type { HotelPickerOption } from "@/server/repo/catalog";
 import { programDraftForQuoteAction, saveQuoteAction } from "@/server/actions/quotes";
-import { CompanyEditor } from "./CompanyEditor";
+import { CompanyEditor, emptyCompanyForm } from "./CompanyEditor";
 import { MoneyInput, NumberInput, StringList } from "./fields";
 import { ImagePicker } from "./ImagePicker";
 import { Modal } from "./Modal";
@@ -43,7 +46,24 @@ export interface QuoteItemState {
   unit_cost: number | null;
 }
 
+export interface QuoteHotelRateState {
+  rate_id: string | null;
+  source: "library" | "company" | "custom";
+  basis: "per_person" | "per_room";
+  occupancy: number;
+  currency: string;
+  night_price: number | null;
+  night_cost: number | null;
+  refresh: boolean;
+}
+
 export interface QuoteFormState {
+  audience: "company" | "traveler";
+  branding: "company" | "etijah";
+  lead_id: number | null;
+  b2b_request_id: number | null;
+  client: { name: string; phone: string | null; email: string | null } | null;
+  beneficiary: { name: string | null; note: string | null } | null;
   company_id: number | null;
   contact_id: number | null;
   program_id: number | null;
@@ -72,16 +92,22 @@ export interface QuoteFormState {
   gallery: MediaRef[];
   valid_until: string;
   days: { title: string; body: string | null }[];
-  hotels: { hotel_id: number | null; check_in: string | null; check_out: string | null; nights: number; room_type: string | null; board: Board | null; rooms: number | null }[];
+  hotels: { id: string | null; hotel_id: number | null; check_in: string | null; check_out: string | null; nights: number; room_type: string | null; board: Board | null; rooms: number | null; rate: QuoteHotelRateState | null; v?: number }[];
   items: QuoteItemState[];
 }
 
 interface Props {
   initial: QuoteFormState;
   meta: (QuoteMeta & { status: QuoteStatus; revision: number }) | null;
-  companies: { id: number; name: string; contacts: { id: number; name: string; phone: string | null; email: string | null; is_primary: boolean }[] }[];
-  programs: { id: number; label: string }[];
-  hotels: { id: number; name: string; destination: string; stars: number | null; hasLink: boolean }[];
+  companies: {
+    id: number;
+    name: string;
+    hasLogo: boolean;
+    contacts: { id: number; name: string; phone: string | null; email: string | null; is_primary: boolean }[];
+    hotelRates: { hotel_id: number; rates: { rate_id: string | null; room_label: string | null; board: Board | null; basis: "per_person" | "per_room"; occupancy: number; currency: string; price: number }[] }[];
+  }[];
+  programs: { id: number; label: string; type?: string; options?: { id: string; label: string }[] }[];
+  hotels: HotelPickerOption[];
   currencies: string[];
   defaultTerms: { ar: string; en: string };
   canDelete: boolean;
@@ -121,10 +147,15 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
 
   const payload = () => ({
     ...f,
-    company_id: f.company_id ?? 0,
+    company_id: f.audience === "company" ? f.company_id : null,
+    contact_id: f.audience === "company" ? f.contact_id : null,
+    client: f.audience === "traveler" ? f.client : null,
+    branding: f.audience === "traveler" ? ("etijah" as const) : f.branding,
     cover_media_id: f.cover?.id ?? null,
     gallery: f.gallery.map((m) => m.id),
-    hotels: f.hotels.filter((h) => h.hotel_id).map((h) => ({ ...h, hotel_id: h.hotel_id! })),
+    hotels: f.hotels
+      .filter((h) => h.hotel_id)
+      .map(({ v: _v, ...h }) => ({ ...h, hotel_id: h.hotel_id!, rate: h.rate && h.rate.night_price != null ? { ...h.rate, night_price: h.rate.night_price } : null })),
     items: f.items.map((i) => ({ kind: i.kind, label: i.label, description: i.description, unit: i.unit, quantity: i.quantity, unit_price: i.unit_price ?? 0, unit_cost: i.unit_cost })),
     cover: undefined,
   });
@@ -139,11 +170,12 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
       onError: (r) => setErrors(r.fieldErrors ?? {}),
     });
 
+  const [importOption, setImportOption] = useState<string>("");
   const importProgram = () => {
     if (!importId) return;
     const hasContent = f.days.length || f.hotels.length || f.items.length;
     if (hasContent && !window.confirm("سيستبدل الاستيراد البرنامج اليومي والفنادق والأسعار والخدمات الحالية. متابعة؟")) return;
-    importer.run(() => programDraftForQuoteAction({ programId: importId, locale: f.locale, adults: f.adults }), {
+    importer.run(() => programDraftForQuoteAction({ programId: importId, locale: f.locale, adults: f.adults, optionId: importOption || null }), {
       refresh: false,
       onOk: (d) => {
         setF((x) => ({
@@ -160,8 +192,9 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
             // Consecutive stays from the travel date, when it is known.
             let cursor = x.start_date;
             return d.hotels.map((h) => {
-              if (!cursor) return h;
-              const stay = { ...h, check_in: cursor, check_out: addDays(cursor, h.nights) };
+              const line = { ...h, id: null, check_in: null as string | null, check_out: null as string | null, rooms: null as number | null, rate: { ...h.rate, refresh: false } };
+              if (!cursor) return line;
+              const stay = { ...line, check_in: cursor, check_out: addDays(cursor, h.nights) };
               cursor = stay.check_out;
               return stay;
             });
@@ -183,6 +216,19 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
   const err = (p: string) => errors[`quote.${p}`];
   const errorList = Object.values(errors);
   const linkless = f.hotels.filter((h) => h.hotel_id && !hotels.find((o) => o.id === h.hotel_id)?.hasLink);
+  const hotelById = new Map(hotels.map((h) => [h.id, h]));
+  const companyRatesFor = (hotelId: number) => (f.audience === "company" ? (company?.hotelRates.find((r) => r.hotel_id === hotelId)?.rates ?? []) : []);
+  /** Adds a price line for a hotel stay (per person, for the travelers in the quote). */
+  const addHotelItem = (h: QuoteFormState["hotels"][number]) => {
+    if (!h.rate || h.rate.night_price == null || !h.hotel_id) return;
+    const name = hotelById.get(h.hotel_id)?.name ?? "";
+    const perPerson = h.rate.basis === "per_room" ? Math.ceil((h.rate.night_price * h.nights) / Math.max(1, h.rate.occupancy)) : h.rate.night_price * h.nights;
+    const cost = h.rate.night_cost == null ? null : h.rate.basis === "per_room" ? Math.ceil((h.rate.night_cost * h.nights) / Math.max(1, h.rate.occupancy)) : h.rate.night_cost * h.nights;
+    set("items", [
+      ...f.items,
+      { key: k(), kind: "main", label: `${ar ? "الإقامة في" : "Stay at"} ${name}${h.room_type ? ` — ${h.room_type}` : ""} (${h.nights} ${ar ? "ليالٍ" : "nights"})`, description: null, unit: "person", quantity: Math.max(1, f.adults), unit_price: perPerson, unit_cost: cost },
+    ]);
+  };
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_21rem]">
@@ -199,8 +245,39 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
         ) : null}
 
         <Card>
-          <CardHeader title="العميل ولغة العرض" />
+          <CardHeader title="المستلم وهوية العرض ولغته" />
           <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-1.5 text-sm font-bold text-brand-950">العرض موجّه إلى</legend>
+              <div className="inline-flex rounded-xl bg-mist p-1" role="radiogroup" aria-label="المستلم">
+                {(
+                  [
+                    ["company", "شركة B2B"],
+                    ["traveler", "مسافر (طلب برنامج خاص)"],
+                  ] as const
+                ).map(([a, label]) => (
+                  <button key={a} type="button" role="radio" aria-checked={f.audience === a} data-audience={a} onClick={() => setF((x) => ({ ...x, audience: a, branding: a === "traveler" ? "etijah" : x.branding, client: a === "traveler" ? (x.client ?? { name: "", phone: null, email: null }) : x.client }))} className={`rounded-lg px-4 py-1.5 text-sm font-bold ${f.audience === a ? "bg-white text-brand-950 shadow-sm" : "text-muted"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            {f.audience === "traveler" ? (
+              <>
+                <Field label="اسم المسافر" required error={err("client.name") ?? err("client")}>
+                  <div className="relative">
+                    <UserRound className="pointer-events-none absolute inset-y-0 start-3 my-auto size-4 text-muted" aria-hidden="true" />
+                    <Input className="ps-9" value={f.client?.name ?? ""} onChange={(e) => set("client", { name: e.target.value, phone: f.client?.phone ?? null, email: f.client?.email ?? null })} data-client-name />
+                  </div>
+                </Field>
+                <Field label="هاتف المسافر">
+                  <Input dir="ltr" className="num text-left" value={f.client?.phone ?? ""} onChange={(e) => set("client", { name: f.client?.name ?? "", phone: e.target.value || null, email: f.client?.email ?? null })} />
+                </Field>
+                {f.lead_id ? <p className="text-xs text-muted sm:col-span-2">مرتبط بطلب المسافر #{f.lead_id}. العرض يصدر بهوية الاتجاه.</p> : null}
+              </>
+            ) : null}
+            {f.audience === "company" ? (
+            <>
             <Field label="الشركة المستلمة" required error={err("company_id")} htmlFor="q-company">
               <div className="flex gap-2">
                 <Select
@@ -234,6 +311,17 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
                 ))}
               </Select>
             </Field>
+            <Field label="هوية ملف العرض" hint={company && !company.hasLogo ? "لا يوجد شعار لهذه الشركة بعد: أضفه من ملف الشركة." : "القالب موحد؛ يتغير الشعار والألوان والاسم وبيانات التواصل."}>
+              <Select value={f.branding} onChange={(e) => set("branding", e.target.value as QuoteFormState["branding"])} data-branding>
+                <option value="company">هوية الشركة المختارة</option>
+                <option value="etijah">هوية الاتجاه</option>
+              </Select>
+            </Field>
+            <Field label="الجهة المستفيدة (اختياري)" hint="العميل النهائي للشركة، يظهر في الملف.">
+              <Input value={f.beneficiary?.name ?? ""} onChange={(e) => set("beneficiary", { name: e.target.value || null, note: f.beneficiary?.note ?? null })} data-beneficiary />
+            </Field>
+            </>
+            ) : null}
             <fieldset className="sm:col-span-2">
               <legend className="mb-1.5 text-sm font-bold text-brand-950">لغة العرض</legend>
               <div className="inline-flex rounded-xl bg-mist p-1" role="radiogroup" aria-label="لغة العرض">
@@ -279,6 +367,20 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
                 ))}
               </Select>
             </Field>
+            {programs.find((p) => p.id === importId)?.options?.length ? (
+              <Field label="خيار الفندق" className="min-w-56" htmlFor="q-import-opt">
+                <Select id="q-import-opt" value={importOption} onChange={(e) => setImportOption(e.target.value)}>
+                  <option value="">الخيار الأول</option>
+                  {programs
+                    .find((p) => p.id === importId)!
+                    .options!.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
+            ) : null}
             <Button variant="subtle" onClick={importProgram} disabled={!importId} loading={importer.pending}>
               <Import className="size-4" aria-hidden="true" /> استيراد
             </Button>
@@ -339,11 +441,11 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
                 return (
                   <li key={i} className="grid gap-3 rounded-xl border border-line p-3 md:grid-cols-6">
                     <Field label={`الفندق ${i + 1}`} className="md:col-span-2" htmlFor={`qh-${i}`}>
-                      <Select id={`qh-${i}`} value={h.hotel_id ?? ""} onChange={(e) => upd({ hotel_id: e.target.value ? Number(e.target.value) : null })}>
-                        <option value="">اختر…</option>
+                      <Select id={`qh-${i}`} value={h.hotel_id ?? ""} onChange={(e) => upd({ hotel_id: e.target.value ? Number(e.target.value) : null, rate: null })} data-quote-hotel>
+                        <option value="">اختر من مكتبة الفنادق…</option>
                         {hotels.map((o) => (
                           <option key={o.id} value={o.id}>
-                            {o.name} — {o.destination} {o.stars ? `(${o.stars}★)` : ""}
+                            {o.name} — {o.city} {o.stars ? `(${o.stars}★)` : ""}
                           </option>
                         ))}
                       </Select>
@@ -386,6 +488,62 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
                         ))}
                       </Select>
                     </Field>
+                    {h.hotel_id ? (
+                      <div className="grid gap-2 rounded-xl bg-mist p-3 md:col-span-6 md:grid-cols-[1.6fr_1fr_1fr_auto] md:items-end">
+                        <Field label="سعر الليلة من">
+                          <Select
+                            value={h.rate ? `${h.rate.source}:${h.rate.rate_id ?? ""}` : ""}
+                            data-quote-rate
+                            onChange={(e) => {
+                              const [src, rid] = e.target.value.split(":") as ["library" | "company" | "custom" | "", string];
+                              if (!src) return upd({ rate: null });
+                              if (src === "custom") return upd({ rate: { rate_id: null, source: "custom", basis: h.rate?.basis ?? "per_room", occupancy: h.rate?.occupancy ?? 2, currency: f.currency, night_price: h.rate?.night_price ?? null, night_cost: h.rate?.night_cost ?? null, refresh: false }, v: (h.v ?? 0) + 1 });
+                              if (src === "library") {
+                                const r = hotelById.get(h.hotel_id!)?.rates.find((x) => x.id === rid);
+                                const rt = r ? hotelById.get(h.hotel_id!)?.room_types.find((x) => x.id === r.room_type_id) : null;
+                                if (r) upd({ board: r.board ?? h.board, room_type: h.room_type || (ar ? rt?.name_ar : rt?.name_en || rt?.name_ar) || null, rate: { rate_id: r.id, source: "library", basis: r.basis, occupancy: r.occupancy, currency: r.currency, night_price: r.price, night_cost: r.cost, refresh: true }, v: (h.v ?? 0) + 1 });
+                                return;
+                              }
+                              const cr = companyRatesFor(h.hotel_id!).find((x) => (x.rate_id ?? "") === rid);
+                              if (cr) upd({ board: cr.board ?? h.board, room_type: h.room_type || cr.room_label, rate: { rate_id: cr.rate_id, source: "company", basis: cr.basis, occupancy: cr.occupancy, currency: cr.currency, night_price: cr.price, night_cost: null, refresh: true }, v: (h.v ?? 0) + 1 });
+                            }}
+                          >
+                            <option value="">بدون سعر فندق في هذا السطر</option>
+                            {companyRatesFor(h.hotel_id).length ? (
+                              <optgroup label="أسعار الشركة المخصصة">
+                                {companyRatesFor(h.hotel_id).map((r, ri) => (
+                                  <option key={`c${ri}`} value={`company:${r.rate_id ?? ""}`}>
+                                    {r.room_label} · {r.board ? BOARD_LABELS[r.board].ar : "—"} · {formatMoney(r.price, r.currency, "ar")} {RATE_BASIS_LABELS[r.basis].ar}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ) : null}
+                            <optgroup label="مكتبة الفنادق">
+                              {(hotelById.get(h.hotel_id)?.rates ?? []).map((r) => (
+                                <option key={r.id} value={`library:${r.id}`}>
+                                  {hotelById.get(h.hotel_id!)?.room_types.find((x) => x.id === r.room_type_id)?.name_ar} · {r.board ? BOARD_LABELS[r.board].ar : "—"} · {formatMoney(r.price, r.currency, "ar")} {RATE_BASIS_LABELS[r.basis].ar}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <option value="custom:">سعر خاص لهذا العرض</option>
+                          </Select>
+                        </Field>
+                        {h.rate ? (
+                          <>
+                            <Field label={`سعر الليلة (${h.rate.currency}) ${RATE_BASIS_LABELS[h.rate.basis].ar}`} hint="تعديله هنا لا يغيّر سعر المكتبة.">
+                              <MoneyInput key={`qr-${i}-${h.v ?? 0}`} value={h.rate.night_price} onChange={(v) => upd({ rate: { ...h.rate!, night_price: v } })} aria-label="سعر الليلة" />
+                            </Field>
+                            <p className="text-xs text-muted">
+                              {h.rate.night_cost != null ? <span className="block">تكلفة داخلية: {formatMoney(h.rate.night_cost, h.rate.currency, "ar")}</span> : null}
+                              {h.rate.currency !== f.currency ? <span className="block font-bold text-accent-700">عملة مختلفة عن العرض ({f.currency})</span> : null}
+                            </p>
+                            <Button size="sm" variant="subtle" onClick={() => addHotelItem(h)} disabled={h.rate.night_price == null || h.rate.currency !== f.currency} data-add-hotel-item>
+                              <Tag className="size-4" aria-hidden="true" /> إضافة كبند سعر
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="flex items-end justify-end gap-1">
                       <Button size="sm" variant="ghost" aria-label="تقديم" onClick={() => set("hotels", f.hotels.map((x, j, a) => (j === i - 1 ? a[i] : j === i ? a[i - 1] : x)))} disabled={i === 0}>
                         <ArrowUp className="size-4" aria-hidden="true" />
@@ -398,7 +556,7 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
                 );
               })}
             </ul>
-            <Button size="sm" variant="subtle" className="mt-3" onClick={() => set("hotels", [...f.hotels, { hotel_id: null, check_in: f.start_date, check_out: f.end_date, nights: f.start_date && f.end_date ? Math.max(1, daysBetween(f.start_date, f.end_date)) : 1, room_type: null, board: "BB", rooms: f.rooms || null }])}>
+            <Button size="sm" variant="subtle" className="mt-3" data-add-quote-hotel onClick={() => set("hotels", [...f.hotels, { id: null, hotel_id: null, check_in: f.start_date, check_out: f.end_date, nights: f.start_date && f.end_date ? Math.max(1, daysBetween(f.start_date, f.end_date)) : 1, room_type: null, board: "BB", rooms: f.rooms || null, rate: null }])}>
               <Plus className="size-4" aria-hidden="true" /> إضافة فندق
             </Button>
           </div>
@@ -696,13 +854,13 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
             <p className="mt-3 text-xs text-muted">بعد الحفظ تظهر خيارات المعاينة وملف PDF والإرسال.</p>
           )}
         </Card>
-        {meta ? <QuoteSharePanel meta={meta} contact={contact} company={company?.name ?? ""} title={f.title} locale={f.locale} canDelete={canDelete} dirty={dirty} /> : null}
+        {meta ? <QuoteSharePanel meta={meta} contact={f.audience === "traveler" && f.client ? { name: f.client.name, phone: f.client.phone, email: f.client.email } : contact} company={f.audience === "traveler" ? (f.client?.name ?? "") : (company?.name ?? "")} title={f.title} locale={f.locale} canDelete={canDelete} dirty={dirty} portal={f.audience === "company"} /> : null}
       </aside>
 
       <Modal open={companyModal} onClose={() => setCompanyModal(false)} title="شركة جديدة" wide>
         <CompanyEditor
           compact
-          initial={{ id: null, name: "", name_en: null, industry: null, city: null, address: null, website: null, phone: null, email: null, notes: null }}
+          initial={emptyCompanyForm()}
           onSaved={(id) => {
             setCompanyModal(false);
             setF((x) => ({ ...x, company_id: id, contact_id: null }));

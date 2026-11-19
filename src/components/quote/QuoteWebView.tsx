@@ -9,7 +9,7 @@ import { daysBetween, formatDay, todayDay } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import type { QuoteView } from "@/server/repo/quotes";
 import { QuoteRespond, QuoteViewBeacon } from "./QuoteClient";
-import { boardText, datesText, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
+import { boardText, BrandMark, brandStyle, datesText, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
 
 export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; token: string; mode: "client" | "staff"; editorHref?: string }) {
   const t = quoteDict[q.locale];
@@ -19,6 +19,7 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
   const ask = whatsappUrl(q.locale === "ar" ? `مرحباً، بخصوص عرض السعر رقم ${q.ref} (${q.title}).` : `Hello, regarding quotation ${q.ref} (${q.title}).`);
   const options = q.items.filter((i) => i.kind === "option");
   const nights = q.startDate && q.endDate ? daysBetween(q.startDate, q.endDate) : null;
+  const etijah = q.brand.kind === "etijah";
 
   const banner =
     q.status === "expired"
@@ -32,7 +33,7 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
             : null;
 
   return (
-    <div className="min-h-svh bg-mist">
+    <div className="min-h-svh bg-mist" style={brandStyle(q.brand)} data-brand={q.brand.kind}>
       {mode === "client" ? <QuoteViewBeacon token={token} /> : null}
       {mode === "staff" ? (
         <div className="sticky top-0 z-50 flex flex-wrap items-center justify-center gap-3 bg-accent-500 px-4 py-2 text-sm font-bold text-brand-950">
@@ -47,7 +48,7 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
 
       <header className="border-b border-line bg-white">
         <div className="container-site flex items-center justify-between gap-4 py-4">
-          <Logo locale={q.locale} idSuffix="quote" />
+          {etijah ? <Logo locale={q.locale} idSuffix="quote" /> : <div className="text-brand-950"><BrandMark brand={q.brand} locale={q.locale} idSuffix="quote" /></div>}
           <div className="text-end">
             <p className="text-xs font-bold text-muted">{t.ref}</p>
             <p className="num font-black text-brand-950" dir="ltr">
@@ -60,7 +61,7 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
 
       <main id="main">
         {/* Hero */}
-        <section className="surface-dark relative isolate overflow-hidden bg-brand-950">
+        <section className="surface-dark relative isolate overflow-hidden bg-[var(--qp)]">
           {q.cover ? (
             <div className="absolute inset-0 -z-10">
               <MediaImage media={q.cover} alt="" priority sizes="100vw" max={1600} className="h-full w-full object-cover opacity-55" />
@@ -72,12 +73,16 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
               {t.docTitle} · {t.preparedFor}
             </p>
             <p className="mt-1 text-2xl font-extrabold text-white sm:text-3xl" data-company-name>
-              {q.company.name}
+              {q.recipient.name}
             </p>
-            {q.contact ? (
+            {q.recipient.contact ? (
               <p className="mt-1 text-white/70">
-                {t.attention}: {q.contact.name}
-                {q.contact.position ? ` — ${q.contact.position}` : ""}
+                {t.attention}: {q.recipient.contact}
+              </p>
+            ) : null}
+            {q.beneficiary ? (
+              <p className="mt-1 text-white/70">
+                {t.beneficiary}: {[q.beneficiary.name, q.beneficiary.note].filter(Boolean).join(" — ")}
               </p>
             ) : null}
             <h1 className="mt-8 max-w-4xl text-[2.1rem] leading-[1.25] font-black text-balance text-white sm:text-[3rem]">{q.title}</h1>
@@ -296,9 +301,11 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
                 <a href={pdfHref} className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-600 font-bold text-white transition-colors hover:bg-brand-700" data-pdf-link>
                   <Download className="size-5" aria-hidden="true" /> {t.downloadPdf}
                 </a>
-                <a href={ask} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-line font-bold text-brand-900 hover:bg-brand-50">
-                  <WhatsAppIcon className="size-5 text-[#1fa855]" /> {t.whatsapp}
-                </a>
+                {etijah ? (
+                  <a href={ask} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-line font-bold text-brand-900 hover:bg-brand-50">
+                    <WhatsAppIcon className="size-5 text-[#1fa855]" /> {t.whatsapp}
+                  </a>
+                ) : null}
               </div>
             </div>
             <div className="mt-4 rounded-[1.5rem] bg-white p-5 text-sm ring-1 ring-brand-950/5">
@@ -308,12 +315,25 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
                   {t.preparedBy}: <span className="font-bold text-ink">{q.preparedBy}</span>
                 </p>
               ) : null}
-              <a href={telUrl} className="mt-3 flex items-center gap-2 font-bold text-brand-700">
-                <Phone className="size-4" aria-hidden="true" /> <span dir="ltr" className="num">{site.phone.display}</span>
-              </a>
-              <p className="mt-2 leading-[1.8] text-muted">
-                {q.locale === "ar" ? site.nameAr : site.nameEn} — {q.locale === "ar" ? `${site.address.streetAr}، ${site.address.cityAr}` : `${site.address.streetEn}, ${site.address.cityEn}`}
-              </p>
+              {etijah ? (
+                <>
+                  <a href={telUrl} className="mt-3 flex items-center gap-2 font-bold text-brand-700">
+                    <Phone className="size-4" aria-hidden="true" /> <span dir="ltr" className="num">{site.phone.display}</span>
+                  </a>
+                  <p className="mt-2 leading-[1.8] text-muted">
+                    {q.locale === "ar" ? site.nameAr : site.nameEn} — {q.locale === "ar" ? `${site.address.streetAr}، ${site.address.cityAr}` : `${site.address.streetEn}, ${site.address.cityEn}`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-3 font-bold text-brand-950">{q.brand.name}</p>
+                  {q.brand.contactLines.map((l) => (
+                    <p key={l} className="mt-1 leading-[1.8] text-muted">
+                      {l}
+                    </p>
+                  ))}
+                </>
+              )}
             </div>
           </aside>
         </div>

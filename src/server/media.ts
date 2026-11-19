@@ -1,35 +1,46 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { del, get, put } from "@vercel/blob";
 import sharp, { type Metadata } from "sharp";
 import { MEDIA_WIDTHS, type MediaRef } from "@/lib/media";
-import { all, get, now, placeholders, run } from "./db";
+import { col, now } from "./db";
 
-/** Uploaded images live outside public/ and are served by app/media/[file]/route.ts. */
-export const MEDIA_DIR = path.resolve(/*turbopackIgnore: true*/ process.env.MEDIA_DIR || path.join(process.cwd(), "storage", "media"));
+/**
+ * Uploaded images live in Vercel Blob (BLOB_READ_WRITE_TOKEN, under "media/") and are served
+ * same-origin by app/media/[file]/route.ts, so page URLs never depend on the storage provider.
+ * BLOB_ACCESS must match the store type chosen when creating it: "private" (default) or "public".
+ */
+const BLOB_PREFIX = "media/";
+const BLOB_ACCESS: "private" | "public" = process.env.BLOB_ACCESS === "public" ? "public" : "private";
 export const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const ACCEPTED_FORMATS = new Set(["jpeg", "png", "webp", "avif", "heif", "gif", "tiff"]);
-const FILE_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d{3,4})\.webp$/;
+const FILE_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d{2,4})\.webp$/;
 
 export class UploadError extends Error {}
 
-interface MediaRow {
-  id: string;
+export interface MediaDoc {
+  _id: string;
+  original_name: string | null;
+  kind: "photo" | "logo";
   width: number;
   height: number;
-  widths: string;
+  widths: number[];
   blur: string;
+  bytes: number;
   alt_ar: string | null;
   alt_en: string | null;
+  uploaded_by: number | null;
+  created_at: string;
 }
+
+const media = () => col<MediaDoc>("media");
 
 /**
  * Validates and stores an uploaded image. The bytes are decoded and re-encoded by sharp
  * (EXIF orientation applied, metadata stripped), so only clean WebP files are ever served,
  * whatever the upload contained.
  */
-export async function storeImage(bytes: Buffer, originalName: string, userId: number): Promise<MediaRef> {
+export async function storeImage(bytes: Buffer, originalName: string, userId: number, kind: "photo" | "logo" = "photo"): Promise<MediaRef> {
   if (bytes.length === 0) throw new UploadError("الملف فارغ.");
   if (bytes.length > MAX_UPLOAD_BYTES) throw new UploadError("حجم الصورة أكبر من 12 ميغابايت.");
 
@@ -40,10 +51,10 @@ export async function storeImage(bytes: Buffer, originalName: string, userId: nu
     throw new UploadError("الملف ليس صورة صالحة.");
   }
   if (!meta.format || !ACCEPTED_FORMATS.has(meta.format) || !meta.width || !meta.height) throw new UploadError("صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WebP.");
-  if (meta.width < 400 || meta.height < 260) throw new UploadError("الصورة صغيرة جداً. يُفضّل عرض 1600 بكسل على الأقل.");
+  if (kind === "photo" && (meta.width < 400 || meta.height < 260)) throw new UploadError("الصورة صغيرة جداً. يُفضّل عرض 1600 بكسل على الأقل.");
+  if (kind === "logo" && (meta.width < 64 || meta.height < 32)) throw new UploadError("الشعار صغير جداً. يُفضّل عرض 400 بكسل على الأقل.");
 
   const id = randomUUID();
-  await mkdir(MEDIA_DIR, { recursive: true });
   const base = () => sharp(bytes, { limitInputPixels: 60_000_000, animated: false }).rotate();
 
   // Oriented dimensions (EXIF rotation can swap width and height).
@@ -53,73 +64,93 @@ export async function storeImage(bytes: Buffer, originalName: string, userId: nu
 
   // Standard widths below the original, plus the original (capped at the largest standard width).
   const largest = Math.min(width, MEDIA_WIDTHS[MEDIA_WIDTHS.length - 1]);
-  const unique = [...MEDIA_WIDTHS.filter((w) => w < largest), largest];
+  // Logos keep transparency and are never upscaled; one 480px (or smaller) variant is enough.
+  const unique = kind === "logo" ? [Math.min(width, 480)] : [...MEDIA_WIDTHS.filter((w) => w < largest), largest];
 
   let total = 0;
   for (const w of unique) {
-    const out = await base().resize({ width: w, withoutEnlargement: true }).webp({ quality: 80, effort: 5 }).toBuffer();
+    const out = await base().resize({ width: w, withoutEnlargement: true }).webp(kind === "logo" ? { quality: 92, alphaQuality: 100, effort: 5 } : { quality: 80, effort: 5 }).toBuffer();
     total += out.length;
-    await writeFile(path.join(MEDIA_DIR, `${id}-${w}.webp`), out);
+    await put(`${BLOB_PREFIX}${id}-${w}.webp`, out, { access: BLOB_ACCESS, contentType: "image/webp", addRandomSuffix: false, cacheControlMaxAge: 31_536_000 });
   }
   const blurBuf = await base().resize({ width: 24 }).webp({ quality: 40 }).toBuffer();
   const blur = `data:image/webp;base64,${blurBuf.toString("base64")}`;
 
-  run(
-    "INSERT INTO media (id, original_name, width, height, widths, blur, bytes, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    id,
-    originalName.slice(0, 200),
+  await (await media()).insertOne({
+    _id: id,
+    original_name: originalName.slice(0, 200),
+    kind,
     width,
     height,
-    JSON.stringify(unique),
+    widths: unique,
     blur,
-    total,
-    userId,
-    now(),
-  );
+    bytes: total,
+    alt_ar: null,
+    alt_en: null,
+    uploaded_by: userId,
+    created_at: now(),
+  });
   return { id, width, height, widths: unique, blur };
 }
 
-const toRef = (r: MediaRow, alt?: string | null): MediaRef => ({
-  id: r.id,
+const PROJECTION = { width: 1, height: 1, widths: 1, blur: 1, original_name: 1, kind: 1 } as const;
+const toRef = (r: Pick<MediaDoc, "_id" | "width" | "height" | "widths" | "blur">, alt?: string | null): MediaRef => ({
+  id: r._id,
   width: r.width,
   height: r.height,
-  widths: JSON.parse(r.widths) as number[],
+  widths: r.widths,
   blur: r.blur,
   alt: alt ?? null,
 });
 
-export function mediaById(id: string | null | undefined): MediaRef | null {
+export async function mediaById(id: string | null | undefined): Promise<MediaRef | null> {
   if (!id) return null;
-  const r = get<MediaRow>("SELECT id, width, height, widths, blur, alt_ar, alt_en FROM media WHERE id = ?", id);
+  const r = await (await media()).findOne({ _id: id }, { projection: PROJECTION });
   return r ? toRef(r) : null;
 }
 
-export function mediaByIds(ids: string[]): Map<string, MediaRef> {
-  if (!ids.length) return new Map();
-  const rows = all<MediaRow>(`SELECT id, width, height, widths, blur, alt_ar, alt_en FROM media WHERE id IN (${placeholders(ids.length)})`, ...ids);
-  return new Map(rows.map((r) => [r.id, toRef(r)]));
+export async function mediaByIds(ids: (string | null | undefined)[]): Promise<Map<string, MediaRef>> {
+  const unique = [...new Set(ids.filter((m): m is string => !!m))];
+  if (!unique.length) return new Map();
+  const rows = await (await media()).find({ _id: { $in: unique } }, { projection: PROJECTION }).toArray();
+  return new Map(rows.map((r) => [r._id, toRef(r)]));
 }
 
-export const mediaExists = (id: string) => !!get("SELECT 1 FROM media WHERE id = ?", id);
+/** Ordered MediaRefs for a list of ids (missing ones dropped). */
+export async function mediaList(ids: string[]): Promise<MediaRef[]> {
+  const map = await mediaByIds(ids);
+  return ids.map((m) => map.get(m)).filter((m): m is MediaRef => !!m);
+}
+
+/** True when every id exists. */
+export async function mediaExist(ids: (string | null | undefined)[]): Promise<boolean> {
+  const unique = [...new Set(ids.filter((m): m is string => !!m))];
+  if (!unique.length) return true;
+  return (await (await media()).countDocuments({ _id: { $in: unique } })) === unique.length;
+}
 
 /** Recent uploads for the staff media picker. */
-export function recentMedia(limit = 60): (MediaRef & { original_name: string | null })[] {
-  return all<MediaRow & { original_name: string | null }>(
-    "SELECT id, width, height, widths, blur, alt_ar, alt_en, original_name FROM media ORDER BY created_at DESC LIMIT ?",
-    limit,
-  ).map((r) => ({ ...toRef(r), original_name: r.original_name }));
+export async function recentMedia(limit = 60, kind?: "photo" | "logo"): Promise<(MediaRef & { original_name: string | null })[]> {
+  const rows = await (await media())
+    .find(kind ? { kind } : {}, { projection: PROJECTION })
+    .sort({ created_at: -1 })
+    .limit(limit)
+    .toArray();
+  return rows.map((r) => ({ ...toRef(r), original_name: r.original_name }));
 }
 
-export async function readMediaFile(file: string): Promise<Buffer | null> {
-  const match = FILE_PATTERN.exec(file);
-  if (!match) return null;
+/** Streams one stored variant (file names are validated against a strict pattern first). */
+export async function readMediaFile(file: string): Promise<{ stream: ReadableStream<Uint8Array>; size: number } | null> {
+  if (!FILE_PATTERN.test(file)) return null;
   try {
-    return await readFile(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ MEDIA_DIR, file));
-  } catch {
+    const r = await get(`${BLOB_PREFIX}${file}`, { access: BLOB_ACCESS });
+    return r && r.statusCode === 200 ? { stream: r.stream, size: r.blob.size } : null;
+  } catch (error) {
+    console.error("[media]", error);
     return null;
   }
 }
 
 export async function deleteMediaFiles(ref: MediaRef) {
-  await Promise.all(ref.widths.map((w) => unlink(path.join(MEDIA_DIR, `${ref.id}-${w}.webp`)).catch(() => undefined)));
+  await del(ref.widths.map((w) => `${BLOB_PREFIX}${ref.id}-${w}.webp`)).catch(() => undefined);
 }

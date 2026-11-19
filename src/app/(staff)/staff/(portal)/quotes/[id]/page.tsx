@@ -2,11 +2,10 @@ import { notFound } from "next/navigation";
 import { QuoteEditor } from "@/components/staff/QuoteEditor";
 import { Card, CardHeader, PageHeader } from "@/components/staff/ui";
 import { formatDateTime } from "@/lib/dates";
-import type { MediaRef } from "@/lib/media";
 import { can } from "@/lib/permissions";
 import { QUOTE_STATUS_LABELS, type QuoteStatus } from "@/lib/travel-labels";
 import { requireStaffPage } from "@/server/auth/session";
-import { mediaById, mediaByIds } from "@/server/media";
+import { mediaById, mediaList } from "@/server/media";
 import { quoteEditorOptions } from "@/server/quote-editor-data";
 import { getQuoteEditor, quoteEvents } from "@/server/repo/quotes";
 
@@ -27,19 +26,19 @@ const EVENT_LABELS: Record<string, string> = {
   link_expiry: "تغيير صلاحية الرابط",
   pdf_downloaded: "نزّل العميل ملف PDF",
 };
-const CHANNELS: Record<string, string> = { whatsapp: "واتساب", email: "البريد الإلكتروني", link: "رابط" };
+const CHANNELS: Record<string, string> = { whatsapp: "واتساب", email: "البريد الإلكتروني", link: "رابط", portal: "بوابة الشركة" };
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
-  const staff = await requireStaffPage("b2b.manage");
-  const q = getQuoteEditor(Number((await params).id));
+  const staff = await requireStaffPage("quotes.manage");
+  const id = Number((await params).id);
+  const q = Number.isInteger(id) ? await getQuoteEditor(id) : null;
   if (!q) notFound();
-  const o = quoteEditorOptions();
-  const gallery = mediaByIds(q.gallery);
-  const events = quoteEvents(q.id);
+  const [o, gallery, events, cover] = await Promise.all([quoteEditorOptions(), mediaList(q.gallery), quoteEvents(q.id), mediaById(q.cover_media_id)]);
+  const recipient = q.audience === "company" ? (o.companies.find((c) => c.id === q.company_id)?.name ?? "") : (q.client?.name ?? "");
 
   return (
     <>
-      <PageHeader title={q.title} description={`${q.ref} · ${o.companies.find((c) => c.id === q.company_id)?.name ?? ""}`} back={{ href: "/staff/quotes/", label: "عروض الأسعار" }} />
+      <PageHeader title={q.title} description={`${q.ref} · ${q.audience === "company" ? "شركة" : "مسافر"}: ${recipient}`} back={{ href: "/staff/quotes/", label: "عروض الأسعار" }} />
       <QuoteEditor
         key={q.updated_at}
         meta={{
@@ -66,8 +65,9 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         canDelete={can(staff.role, "b2b.delete")}
         initial={{
           ...q,
-          cover: mediaById(q.cover_media_id),
-          gallery: q.gallery.map((m) => gallery.get(m)).filter((m): m is MediaRef => !!m),
+          cover,
+          gallery,
+          hotels: q.hotels.map((h) => ({ ...h, rate: h.rate ? { ...h.rate, refresh: false } : null })),
           items: q.items.map((i, n) => ({ ...i, key: `s${n}` })),
         }}
       />
@@ -82,7 +82,7 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
                 {e.note ? <span className="mt-0.5 block font-normal whitespace-pre-line text-ink">{e.note}</span> : null}
               </span>
               <span className="text-xs text-muted">
-                {e.user_name ?? (e.actor_label === "client" ? "العميل" : e.actor_label === "system" ? "النظام" : (e.actor_label ?? "العميل"))} · {formatDateTime(e.created_at)}
+                {e.user_name ?? (e.actor_label === "client" ? "العميل" : e.actor_label === "system" ? "النظام" : (e.actor_label ?? "العميل"))}{e.channel === "portal" ? " (بوابة الشركة)" : ""} · {formatDateTime(e.created_at)}
               </span>
             </li>
           ))}

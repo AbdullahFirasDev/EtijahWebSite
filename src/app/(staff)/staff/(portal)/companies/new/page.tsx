@@ -1,4 +1,5 @@
 import { CompanyEditor } from "@/components/staff/CompanyEditor";
+import { emptyCompanyForm } from "@/lib/company-form";
 import { PageHeader } from "@/components/staff/ui";
 import { requireStaffPage } from "@/server/auth/session";
 
@@ -8,8 +9,8 @@ export default async function NewCompanyPage() {
   await requireStaffPage("b2b.manage");
   return (
     <>
-      <PageHeader title="شركة جديدة" back={{ href: "/staff/companies/", label: "الشركات" }} />
-      <CompanyEditor initial={{ id: null, name: "", name_en: null, industry: null, city: null, address: null, website: null, phone: null, email: null, notes: null }} />
+      <PageHeader title="شركة جديدة" description="أدخل بيانات الشركة وهويتها البصرية. بعد الحفظ يمكنك إضافة جهات الاتصال والمستخدمين والفنادق والعمولات." back={{ href: "/staff/companies/", label: "الشركات" }} />
+      <CompanyEditor initial={emptyCompanyForm()} />
     </>
   );
 }

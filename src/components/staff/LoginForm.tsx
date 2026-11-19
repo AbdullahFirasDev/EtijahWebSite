@@ -2,11 +2,11 @@
 
 import { CircleAlert, LogIn } from "lucide-react";
 import { useActionState } from "react";
-import { loginAction, type LoginState } from "@/server/actions/auth";
+import { companyLoginAction, loginAction, type LoginState } from "@/server/actions/auth";
 import { Field, Input } from "./ui";
 
-export function LoginForm({ next }: { next: string }) {
-  const [state, action, pending] = useActionState<LoginState, FormData>(loginAction, undefined);
+export function LoginForm({ next, realm = "staff" }: { next: string; realm?: "staff" | "company" }) {
+  const [state, action, pending] = useActionState<LoginState, FormData>(realm === "company" ? companyLoginAction : loginAction, undefined);
   return (
     <form action={action} className="grid gap-5" noValidate>
       {state?.error ? (

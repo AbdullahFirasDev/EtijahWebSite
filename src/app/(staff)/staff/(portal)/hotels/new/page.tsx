@@ -1,21 +1,22 @@
 import { HotelEditor } from "@/components/staff/HotelEditor";
 import { EmptyState, LinkButton, PageHeader } from "@/components/staff/ui";
-import { countryName } from "@/lib/countries";
 import { requireStaffPage } from "@/server/auth/session";
-import { listDestinations } from "@/server/repo/catalog";
+import { destinationOptions } from "@/server/editor-options";
 
 export const metadata = { title: "فندق جديد" };
 
 export default async function NewHotelPage() {
   await requireStaffPage("hotels.edit");
-  const destinations = listDestinations({ activeOnly: true }).map((d) => ({ id: d.id, label: `${d.name_ar} — ${countryName(d.country_code, "ar")}` }));
+  const { destinations, countries } = await destinationOptions({ activeOnly: true });
   return (
     <>
-      <PageHeader title="فندق جديد" back={{ href: "/staff/hotels/", label: "الفنادق" }} />
+      <PageHeader title="فندق جديد" back={{ href: "/staff/hotels/", label: "مكتبة الفنادق" }} description="أدخل بيانات الفندق وأنواع غرفه، ثم أضف أسعار الليلة بعد الحفظ." />
       {destinations.length ? (
         <HotelEditor
           destinations={destinations}
+          countries={countries}
           canDelete={false}
+          canEdit
           initial={{
             destination_id: destinations.length === 1 ? destinations[0].id : null,
             name_ar: "",
@@ -31,8 +32,15 @@ export default async function NewHotelPage() {
             description_en: null,
             rooms_ar: null,
             rooms_en: null,
-            active: true,
+            amenities: [],
+            contact: { phone: null, email: null, person: null },
+            internal_notes: null,
+            status: "active",
             media: [],
+            room_types: [
+              { id: null, name_ar: "غرفة مزدوجة", name_en: "Double room", max_pax: 2, notes: null },
+              { id: null, name_ar: "غرفة ثلاثية", name_en: "Triple room", max_pax: 3, notes: null },
+            ],
           }}
         />
       ) : (

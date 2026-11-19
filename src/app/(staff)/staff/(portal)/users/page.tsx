@@ -11,7 +11,7 @@ export default async function UsersPage() {
   return (
     <>
       <PageHeader title="المستخدمون والصلاحيات" description="حسابات الموظفين وأدوارهم. لكل دور صلاحيات محددة." />
-      <UsersManager me={staff.id} users={listUsers().map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: !!u.active, last_login: u.last_login_at ? formatDateTime(u.last_login_at) : null }))} />
+      <UsersManager me={staff.id} users={(await listUsers()).map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: !!u.active, last_login: u.last_login_at ? formatDateTime(u.last_login_at) : null }))} />
     </>
   );
 }

@@ -10,10 +10,10 @@ import { listDeparturesStaff } from "@/server/repo/programs";
 export const metadata = { title: "الكروبات والمقاعد" };
 
 export default async function GroupsPage({ searchParams }: { searchParams: Promise<{ scope?: string }> }) {
-  const staff = await requireStaffPage("catalog.view");
+  const staff = await requireStaffPage("programs.view");
   const { scope } = await searchParams;
   const s = scope === "past" || scope === "all" ? scope : "upcoming";
-  const items = listDeparturesStaff({ scope: s });
+  const items = await listDeparturesStaff({ scope: s });
   const tabs = [
     ["upcoming", "القادمة"],
     ["past", "السابقة"],
@@ -33,7 +33,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
         </nav>
         {items.length ? (
           <DeparturesTable
-            canEdit={can(staff.role, "catalog.edit")}
+            canEdit={can(staff.role, "programs.edit")}
             items={items.map((d) => ({
               id: d.id,
               code: d.code,

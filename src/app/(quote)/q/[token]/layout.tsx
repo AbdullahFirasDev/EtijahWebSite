@@ -11,7 +11,7 @@ export const viewport: Viewport = { themeColor: "#051c33", colorScheme: "light" 
  * sites. Link previews only show a generic title (no company or price details).
  */
 export async function generateMetadata({ params }: LayoutProps<"/q/[token]">): Promise<Metadata> {
-  const q = getQuoteByToken((await params).token);
+  const q = await getQuoteByToken((await params).token);
   const locale = q?.locale ?? "ar";
   return {
     title: q ? quoteDict[locale].privateTitle(q.ref) : "Etijah",
@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: LayoutProps<"/q/[token]">): P
 
 /** Root layout for client quote pages; language and direction follow the quote. */
 export default async function QuoteLayout({ children, params }: LayoutProps<"/q/[token]">) {
-  const q = getQuoteByToken((await params).token);
+  const q = await getQuoteByToken((await params).token);
   const locale = q?.locale ?? "ar";
   return (
     <html lang={locale} dir={locale === "ar" ? "rtl" : "ltr"} className={cairo.variable} data-scroll-behavior="smooth">

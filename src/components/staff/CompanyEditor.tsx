@@ -1,9 +1,14 @@
 "use client";
 
 import { Mail, Pencil, Phone, Plus, Save, Star, Trash2, UserRound } from "lucide-react";
+import { mediaSrc, type MediaRef } from "@/lib/media";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { deleteCompanyAction, deleteContactAction, saveCompanyAction, saveContactAction } from "@/server/actions/companies";
+import { emptyCompanyForm } from "@/lib/company-form";
+import { ImagePicker } from "./ImagePicker";
+
+export { emptyCompanyForm };
 import { Modal } from "./Modal";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Textarea, Toggle } from "./ui";
 import { useActionRunner } from "./useActionRunner";
@@ -19,7 +24,19 @@ export interface CompanyForm {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  terms: string | null;
+  status: "active" | "archived";
+  portal_enabled: boolean;
+  branding: {
+    logo: MediaRef | null;
+    primary_color: string;
+    secondary_color: string;
+    display_name: string | null;
+    display_name_en: string | null;
+    contact_line: string | null;
+  };
 }
+
 
 export function CompanyEditor({ initial, canDelete, onSaved, compact }: { initial: CompanyForm; canDelete?: boolean; onSaved?: (id: number) => void; compact?: boolean }) {
   const [f, setF] = useState(initial);
@@ -28,7 +45,7 @@ export function CompanyEditor({ initial, canDelete, onSaved, compact }: { initia
   const { run, pending } = useActionRunner();
   const set = <K extends keyof CompanyForm>(k: K, v: CompanyForm[K]) => setF((x) => ({ ...x, [k]: v }));
   const save = () =>
-    run(() => saveCompanyAction(f), {
+    run(() => saveCompanyAction({ ...f, branding: { ...f.branding, logo_media_id: f.branding.logo?.id ?? null } }), {
       onOk: (d) => {
         setErrors({});
         if (onSaved) onSaved(d.id);
@@ -64,6 +81,9 @@ export function CompanyEditor({ initial, canDelete, onSaved, compact }: { initia
           </Field>
           <Field label="العنوان" htmlFor="co-address">
             <Input id="co-address" value={f.address ?? ""} onChange={(e) => set("address", e.target.value)} />
+          </Field>
+          <Field label="الشروط الخاصة بالشركة" className="sm:col-span-2" htmlFor="co-terms" hint="تُقترح تلقائياً في عروض أسعار هذه الشركة.">
+            <Textarea id="co-terms" rows={3} value={f.terms ?? ""} onChange={(e) => set("terms", e.target.value)} />
           </Field>
           <Field label="ملاحظات داخلية" className="sm:col-span-2" htmlFor="co-notes" hint="لا تظهر للعميل.">
             <Textarea id="co-notes" rows={3} value={f.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
@@ -102,7 +122,58 @@ export function CompanyEditor({ initial, canDelete, onSaved, compact }: { initia
           </>
         }
       />
-      <div className="p-5">{fields}</div>
+      <div className="grid gap-6 p-5">
+        {fields}
+        <div className="rounded-2xl border border-line p-4">
+          <p className="font-extrabold text-brand-950">الهوية البصرية لملفات PDF</p>
+          <p className="mb-4 text-sm text-muted">القالب موحد لكل الشركات؛ يتغير فقط الشعار والألوان والاسم وبيانات التواصل.</p>
+          <div className="grid gap-4 lg:grid-cols-[14rem_1fr]">
+            <ImagePicker kind="logo" label="شعار الشركة" max={1} value={f.branding.logo ? [f.branding.logo] : []} onChange={(v) => set("branding", { ...f.branding, logo: v[0] ?? null })} hint="PNG بخلفية شفافة يفضل." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="اللون الأساسي" error={errors["branding.primary_color"]} htmlFor="co-c1">
+                <div className="flex gap-2">
+                  <input id="co-c1" type="color" value={f.branding.primary_color} onChange={(e) => set("branding", { ...f.branding, primary_color: e.target.value })} className="h-11 w-14 cursor-pointer rounded-lg border border-line" />
+                  <Input dir="ltr" className="num" value={f.branding.primary_color} onChange={(e) => set("branding", { ...f.branding, primary_color: e.target.value })} aria-label="اللون الأساسي" data-primary-color />
+                </div>
+              </Field>
+              <Field label="اللون الثانوي" error={errors["branding.secondary_color"]} htmlFor="co-c2">
+                <div className="flex gap-2">
+                  <input id="co-c2" type="color" value={f.branding.secondary_color} onChange={(e) => set("branding", { ...f.branding, secondary_color: e.target.value })} className="h-11 w-14 cursor-pointer rounded-lg border border-line" />
+                  <Input dir="ltr" className="num" value={f.branding.secondary_color} onChange={(e) => set("branding", { ...f.branding, secondary_color: e.target.value })} aria-label="اللون الثانوي" data-secondary-color />
+                </div>
+              </Field>
+              <Field label="الاسم على الملفات (عربي)" hint="افتراضياً اسم الشركة." htmlFor="co-dn">
+                <Input id="co-dn" value={f.branding.display_name ?? ""} onChange={(e) => set("branding", { ...f.branding, display_name: e.target.value || null })} />
+              </Field>
+              <Field label="الاسم على الملفات (English)" htmlFor="co-dne">
+                <Input id="co-dne" dir="ltr" className="text-left" value={f.branding.display_name_en ?? ""} onChange={(e) => set("branding", { ...f.branding, display_name_en: e.target.value || null })} />
+              </Field>
+              <Field label="سطر بيانات التواصل في الملفات" className="sm:col-span-2" hint="مثال: الهاتف · البريد · المدينة" htmlFor="co-cl">
+                <Input id="co-cl" value={f.branding.contact_line ?? ""} onChange={(e) => set("branding", { ...f.branding, contact_line: e.target.value || null })} data-contact-line />
+              </Field>
+            </div>
+          </div>
+          <div className="mt-4 overflow-hidden rounded-xl ring-1 ring-line" aria-label="معاينة الهوية">
+            <div className="flex items-center justify-between px-5 py-4" style={{ background: f.branding.primary_color, color: "#fff" }}>
+              <div className="flex items-center gap-3">
+                {f.branding.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={mediaSrc(f.branding.logo, 480)} alt="" className="h-10 w-auto rounded bg-white/95 p-1" />
+                ) : null}
+                <span className="text-lg font-black">{f.branding.display_name || f.name || "اسم الشركة"}</span>
+              </div>
+              <span className="rounded-full px-3 py-1 text-xs font-extrabold" style={{ background: f.branding.secondary_color, color: "#051c33" }}>
+                عرض سعر
+              </span>
+            </div>
+            <p className="bg-white px-5 py-2 text-xs text-muted">{f.branding.contact_line || [f.phone, f.email, f.website].filter(Boolean).join(" · ") || "بيانات التواصل"}</p>
+          </div>
+        </div>
+        <div className="grid gap-4 rounded-2xl border border-line p-4 sm:grid-cols-2">
+          <Toggle id="co-portal" checked={f.portal_enabled} onChange={(v) => set("portal_enabled", v)} label="تفعيل بوابة الشركة" description="يسمح لمستخدمي الشركة بالدخول إلى بوابتها. الإيقاف يُنهي جلساتهم فوراً." />
+          <Toggle id="co-archived" checked={f.status === "archived"} onChange={(v) => set("status", v ? "archived" : "active")} label="أرشفة الشركة" description="لا تظهر عند إنشاء عروض جديدة، ويتوقف دخول مستخدميها." />
+        </div>
+      </div>
     </Card>
   );
 }

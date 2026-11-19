@@ -5,17 +5,18 @@ import { LeadStatusBadge } from "@/components/staff/StatusBadge";
 import { Card, EmptyState, Input, PageHeader, Select, Table } from "@/components/staff/ui";
 import { formatDay, formatDateTime, timeAgo } from "@/lib/dates";
 import { formatPhone } from "@/lib/phone";
-import { LEAD_STATUS_LABELS, LEAD_STATUSES } from "@/lib/travel-labels";
+import { LEAD_KIND_LABELS, LEAD_STATUS_LABELS, LEAD_STATUSES } from "@/lib/travel-labels";
 import { requireStaffPage } from "@/server/auth/session";
 import { listLeads } from "@/server/repo/leads";
 
 export const metadata = { title: "طلبات المسافرين" };
 
-export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
+export default async function RequestsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string; kind?: string; program?: string }> }) {
   await requireStaffPage("leads.view");
   const sp = await searchParams;
   const status = sp.status === "open" || LEAD_STATUSES.includes(sp.status as never) ? sp.status : undefined;
-  const leads = listLeads({ status, q: sp.q?.slice(0, 80) });
+  const kind = sp.kind === "custom" || sp.kind === "program" ? sp.kind : undefined;
+  const leads = await listLeads({ status, q: sp.q?.slice(0, 80), kind, programId: /^\d+$/.test(sp.program ?? "") ? Number(sp.program) : undefined });
 
   return (
     <>
@@ -32,6 +33,11 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                 {LEAD_STATUS_LABELS[s]}
               </option>
             ))}
+          </Select>
+          <Select name="kind" defaultValue={kind ?? ""} aria-label="النوع" className="w-44">
+            <option value="">كل الأنواع</option>
+            <option value="program">{LEAD_KIND_LABELS.program}</option>
+            <option value="custom">{LEAD_KIND_LABELS.custom}</option>
           </Select>
           <button className="rounded-xl bg-brand-50 px-4 text-sm font-bold text-brand-700 hover:bg-brand-100">تصفية</button>
         </form>
@@ -63,7 +69,10 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
                       {formatPhone(l.phone)}
                     </p>
                   </td>
-                  <td className="max-w-[14rem] truncate">{l.program_title}</td>
+                  <td className="max-w-[14rem] truncate">
+                    {l.program_title}
+                    {l.kind === "custom" ? <span className="block text-xs font-bold text-accent-700">{LEAD_KIND_LABELS.custom}</span> : null}
+                  </td>
                   <td className="text-xs whitespace-nowrap">{l.departure_label ? l.departure_label.split("·")[1]?.trim() ?? l.departure_label : l.preferred_date ? formatDay(l.preferred_date, "ar") : "مرن"}</td>
                   <td className="num">
                     {l.adults + l.children}

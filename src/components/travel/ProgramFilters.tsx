@@ -97,9 +97,9 @@ export function ProgramFilters({ t, values, countries, months, budgets }: Props)
 
       <div id="filter-fields" className={`${open ? "grid" : "hidden"} mt-4 gap-3 sm:grid-cols-2 lg:grid lg:grid-cols-5`}>
         {select("country", t.country, countries.map((c) => ({ value: c.code, label: `${c.name} (${c.count})` })), t.anyCountry)}
-        {select("kind", t.kind, [
-          { value: "group", label: t.kinds.group },
-          { value: "package", label: t.kinds.package },
+        {select("type", t.kind, [
+          { value: "fixed", label: t.kinds.fixed },
+          { value: "custom", label: t.kinds.custom },
         ], t.anyKind)}
         {select("duration", t.duration, Object.entries(t.durations).map(([value, label]) => ({ value, label })), t.anyDuration)}
         {select("month", t.month, months, t.anyMonth)}

@@ -12,11 +12,26 @@ export const BOARD_LABELS: Record<Board, L> = {
   AI: { ar: "شامل كلياً", en: "All inclusive" },
 };
 
-export const PROGRAM_KINDS = ["package", "group"] as const;
-export type ProgramKind = (typeof PROGRAM_KINDS)[number];
-export const KIND_LABELS: Record<ProgramKind, L> = {
-  package: { ar: "برنامج سياحي", en: "Holiday package" },
-  group: { ar: "كروب سياحي", en: "Group tour" },
+/**
+ * fixed  — a public program organised in advance, with set departure/return dates and seats.
+ * custom — no fixed date: the traveler describes the trip and staff build a tailored quote.
+ */
+export const PROGRAM_TYPES = ["fixed", "custom"] as const;
+export type ProgramType = (typeof PROGRAM_TYPES)[number];
+export const TYPE_LABELS: Record<ProgramType, L> = {
+  fixed: { ar: "برنامج عام", en: "Scheduled trip" },
+  custom: { ar: "برنامج خاص", en: "Tailor-made trip" },
+};
+export const TYPE_HINTS: Record<ProgramType, string> = {
+  fixed: "برنامج تنظمه الشركة مسبقاً بتاريخ سفر وعودة محددين وعدد مقاعد، مع خيارات فنادق وأسعار نهائية.",
+  custom: "بدون تاريخ ثابت: المسافر يحدد رغبته وموعده عبر نموذج الطلب، والموظف يبني له عرض سعر مخصصاً.",
+};
+
+export const VISIBILITIES = ["public", "unlisted"] as const;
+export type Visibility = (typeof VISIBILITIES)[number];
+export const VISIBILITY_LABELS: Record<Visibility, string> = {
+  public: "عام: يظهر في قائمة البرامج بالموقع",
+  unlisted: "مخفي: يُفتح بالرابط المستقل فقط",
 };
 
 export const PROGRAM_STATUSES = ["draft", "published", "paused", "archived"] as const;
@@ -37,6 +52,10 @@ export const DEPARTURE_STATUS_LABELS: Record<DepartureStatus, L> = {
   closed: { ar: "الحجز مغلق", en: "Booking closed" },
   cancelled: { ar: "ملغى", en: "Cancelled" },
 };
+
+export const LEAD_KINDS = ["program", "custom"] as const;
+export type LeadKind = (typeof LEAD_KINDS)[number];
+export const LEAD_KIND_LABELS: Record<LeadKind, string> = { program: "حجز برنامج عام", custom: "طلب برنامج خاص" };
 
 export const LEAD_STATUSES = ["new", "contacted", "quoted", "confirmed", "cancelled", "lost"] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
@@ -90,6 +109,11 @@ export const PRICING_MODE_LABELS = {
 /** Lucide icon keys offered for services (see components/travel/ServiceIcon.tsx). */
 export const SERVICE_ICONS = ["plane", "hotel", "meals", "transfer", "tours", "guide", "visa", "insurance", "ticket", "ship", "train", "camera", "sim", "check"] as const;
 export type ServiceIcon = (typeof SERVICE_ICONS)[number];
+
+export const RATE_BASIS_LABELS = {
+  per_person: { ar: "للشخص", en: "per person" },
+  per_room: { ar: "للغرفة", en: "per room" },
+} as const;
 
 export const pick = (locale: Locale, ar: string | null | undefined, en: string | null | undefined) =>
   (locale === "en" ? en || ar : ar || en) ?? "";
