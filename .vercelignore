@@ -1,10 +1,10 @@
-# Never upload local data or secrets with `vercel deploy` (git deploys already skip them).
+# Never upload local data or secrets (paths anchored to the project root: src/data/ is source code).
 .env
 .env.*
 !.env.example
-data/
-backups/
-storage/
-out/
-.smoke/
-.next/
+/data/
+/backups/
+/storage/
+/out/
+/.smoke/
+/.next/

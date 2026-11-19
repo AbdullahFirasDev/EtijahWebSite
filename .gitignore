@@ -55,3 +55,6 @@ next-env.d.ts
 
 # old static export archive
 *.zip
+
+.vercel
+.env*
