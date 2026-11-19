@@ -12,7 +12,8 @@ const privateHeaders = [
 ];
 
 /** Files the PDF routes read at runtime (serverless Chromium and the footer's Arabic font). */
-const pdfRuntimeFiles = ["./node_modules/@sparticuz/chromium/bin/**", "./assets/fonts/**"];
+// playwright-core also reads files of its own at runtime (browsers.json, …), so ship the package whole.
+const pdfRuntimeFiles = ["./node_modules/@sparticuz/chromium/bin/**", "./node_modules/playwright-core/**", "./assets/fonts/**"];
 
 const nextConfig: NextConfig = {
   // Deployed on Vercel (Node.js functions): the travel programs, staff portal, B2B quotes and PDF
