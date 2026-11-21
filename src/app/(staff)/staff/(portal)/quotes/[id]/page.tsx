@@ -60,6 +60,8 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
         companies={o.companies}
         programs={o.programs}
         hotels={o.hotels}
+        places={o.places}
+        tours={o.tours}
         currencies={o.currencies}
         defaultTerms={{ ar: o.settings.quote_terms_ar, en: o.settings.quote_terms_en }}
         canDelete={can(staff.role, "b2b.delete")}

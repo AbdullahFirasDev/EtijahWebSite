@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   BedDouble,
+  Binoculars,
   Check,
   CircleAlert,
   Eye,
@@ -34,7 +35,7 @@ import { saveProgramAction } from "@/server/actions/programs";
 import type { CatalogOptions } from "@/server/editor-options";
 import { AirportDatalist, AirportInput } from "./AirportInput";
 import { DestinationPicker } from "./DestinationPicker";
-import { Bilingual, MoneyInput, NumberInput } from "./fields";
+import { Bilingual, DateInput, MoneyInput, NumberInput } from "./fields";
 import { ImagePicker } from "./ImagePicker";
 import { Modal } from "./Modal";
 import { useToast } from "./Toaster";
@@ -713,10 +714,10 @@ export function ProgramWizard({
                   <li key={d.key} className="rounded-xl border border-line p-3" data-departure-row>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_7rem_7rem_9rem_9rem_auto] lg:items-end">
                       <Field label="تاريخ المغادرة">
-                        <Input type="date" dir="ltr" className="num" value={d.depart_date} onChange={(e) => up({ depart_date: e.target.value, return_date: d.return_date < e.target.value ? addDays(e.target.value, Math.max(0, f.duration_days - 1)) : d.return_date })} data-depart-date />
+                        <DateInput value={d.depart_date || null} onChange={(v) => { const day = v ?? ""; up({ depart_date: day, return_date: day && d.return_date < day ? addDays(day, Math.max(0, f.duration_days - 1)) : d.return_date }); }} aria-label="تاريخ المغادرة" data-depart-date />
                       </Field>
                       <Field label="تاريخ العودة" hint={nights ? `${nights + 1} أيام / ${nights} ليالٍ` : undefined}>
-                        <Input type="date" dir="ltr" className="num" min={d.depart_date} value={d.return_date} onChange={(e) => up({ return_date: e.target.value })} data-return-date />
+                        <DateInput min={d.depart_date || undefined} value={d.return_date || null} onChange={(v) => up({ return_date: v ?? "" })} aria-label="تاريخ العودة" data-return-date />
                       </Field>
                       <Field label="المقاعد">
                         <NumberInput min={1} max={2000} value={d.seats_total} onChange={(v) => up({ seats_total: v ?? 1 })} aria-label="المقاعد" />
@@ -981,6 +982,33 @@ export function ProgramWizard({
   );
 
   const svcState = (id: number) => f.services.find((s) => s.service_id === id);
+  /** Pre-registered tours, the program's countries first. */
+  const tourGroups = (() => {
+    const codes = [...new Set([...destCountries.filter((c) => options.tours.some((t) => t.country_code === c)), ...options.tours.map((t) => t.country_code)])];
+    return codes.map((code) => ({ code, own: destCountries.includes(code), tours: options.tours.filter((t) => t.country_code === code) }));
+  })();
+  /** Copies a tour's text (both languages) into a day: as its title when empty, otherwise added to the details. */
+  const addTourToDay = (dayKey: string, tourId: number) => {
+    const t = options.tours.find((x) => x.id === tourId);
+    if (!t) return;
+    const join = (...parts: (string | null)[]) => parts.filter(Boolean).join("\n") || null;
+    const detailAr = join(t.description_ar, t.duration_ar ? `المدة: ${t.duration_ar}` : null);
+    const detailEn = join(t.description_en, t.duration_en ? `Duration: ${t.duration_en}` : null);
+    setF((x) => ({
+      ...x,
+      itinerary: x.itinerary.map((d) => {
+        if (d.key !== dayKey) return d;
+        if (!d.title_ar.trim()) return { ...d, title_ar: t.name_ar, title_en: d.title_en || t.name_en, body_ar: join(d.body_ar, detailAr), body_en: join(d.body_en, detailEn) };
+        return {
+          ...d,
+          body_ar: join(d.body_ar, `• ${t.name_ar}${detailAr ? `\n${detailAr}` : ""}`),
+          body_en: t.name_en || detailEn ? join(d.body_en, `• ${t.name_en ?? t.name_ar}${detailEn ? `\n${detailEn}` : ""}`) : d.body_en,
+        };
+      }),
+    }));
+    setDirty(true);
+    toast.success(`أُضيفت جولة «${t.name_ar}» إلى اليوم.`);
+  };
   const stepDays = (
     <StepCard
       title="5. البرنامج اليومي والخدمات"
@@ -1021,6 +1049,30 @@ export function ProgramWizard({
                   </div>
                 </div>
                 <div className="grid gap-3">
+                  {options.tours.length ? (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-mist px-3 py-2">
+                      <Binoculars className="size-4 shrink-0 text-brand-600" aria-hidden="true" />
+                      <Select
+                        aria-label={`إضافة جولة مسجلة إلى اليوم ${i + 1}`}
+                        value=""
+                        className="h-9 max-w-md flex-1 text-sm"
+                        data-day-tour
+                        onChange={(e) => e.target.value && addTourToDay(d.key, Number(e.target.value))}
+                      >
+                        <option value="">إضافة جولة مسجلة إلى هذا اليوم…</option>
+                        {tourGroups.map((g) => (
+                          <optgroup key={g.code} label={`${countryName(g.code, "ar")}${g.own ? " · ضمن وجهات البرنامج" : ""}`}>
+                            {g.tours.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name_ar}
+                                {t.city_ar ? ` — ${t.city_ar}` : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </Select>
+                    </div>
+                  ) : null}
                   <Bilingual label="عنوان اليوم" ar={d.title_ar} en={d.title_en} onAr={(v) => up({ title_ar: v })} onEn={(v) => up({ title_en: v || null })} errorAr={err(`itinerary.${i}.title_ar`)} maxLength={160} />
                   <Bilingual label="التفاصيل" multiline rows={2} ar={d.body_ar} en={d.body_en} onAr={(v) => up({ body_ar: v || null })} onEn={(v) => up({ body_en: v || null })} />
                 </div>

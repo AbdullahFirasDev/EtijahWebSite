@@ -5,7 +5,7 @@ import { useState } from "react";
 import { COMMISSION_BASIS_LABELS, COMMISSION_BASES, COMMISSION_KIND_LABELS, COMMISSION_KINDS, COMMISSION_METHOD_LABELS, COMMISSION_METHODS, ruleLabel, type CommissionBasis, type CommissionKind, type CommissionMethod } from "@/lib/commission-math";
 import { formatDay, todayDay } from "@/lib/dates";
 import { addRuleAction, deleteRuleAction, endRuleAction } from "@/server/actions/airlines";
-import { MoneyInput } from "./fields";
+import { DateInput, MoneyInput } from "./fields";
 import { Modal } from "./Modal";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Table, Textarea } from "./ui";
 import { useActionRunner } from "./useActionRunner";
@@ -326,10 +326,10 @@ export function RulesManager({
               <Input value={draft.settlement} onChange={(e) => setDraft({ ...draft, settlement: e.target.value })} placeholder="مثال: خصم من فاتورة BSP الشهرية" />
             </Field>
             <Field label="تاريخ بداية التطبيق" required hint="القاعدة السابقة المفتوحة تُغلق في اليوم السابق تلقائياً.">
-              <Input type="date" dir="ltr" className="num" value={draft.valid_from} onChange={(e) => setDraft({ ...draft, valid_from: e.target.value })} data-rule-from />
+              <DateInput value={draft.valid_from || null} onChange={(v) => setDraft({ ...draft, valid_from: v ?? "" })} aria-label="ساري من" data-rule-from />
             </Field>
             <Field label="تاريخ النهاية (اختياري)">
-              <Input type="date" dir="ltr" className="num" value={draft.valid_to} onChange={(e) => setDraft({ ...draft, valid_to: e.target.value })} />
+              <DateInput min={draft.valid_from || undefined} value={draft.valid_to || null} onChange={(v) => setDraft({ ...draft, valid_to: v ?? "" })} aria-label="ساري حتى" />
             </Field>
             <Field label="ملاحظات" className="sm:col-span-2">
               <Textarea rows={2} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
@@ -355,7 +355,7 @@ export function RulesManager({
           <div className="grid gap-4">
             <p className="text-sm text-muted">لا يمكن تغيير النسبة نفسها؛ لتغييرها أضف قاعدة جديدة بتاريخ بداية جديد. التذاكر المسجلة تحتفظ بالنسبة التي احتُسبت بها.</p>
             <Field label="تاريخ النهاية" hint="اتركه فارغاً لقاعدة مفتوحة النهاية.">
-              <Input type="date" dir="ltr" className="num" value={end.valid_to} onChange={(e) => setEnd({ ...end, valid_to: e.target.value })} />
+              <DateInput value={end.valid_to || null} onChange={(v) => setEnd({ ...end, valid_to: v ?? "" })} aria-label="تاريخ الانتهاء" />
             </Field>
             <Field label="ملاحظات">
               <Textarea rows={2} value={end.notes} onChange={(e) => setEnd({ ...end, notes: e.target.value })} />

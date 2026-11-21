@@ -3,6 +3,7 @@
 import { Check, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { DateInput } from "@/components/staff/fields";
 import { Button, Field, Input, Select, Textarea } from "@/components/staff/ui";
 import { useActionRunner } from "@/components/staff/useActionRunner";
 import { companyChangePasswordAction } from "@/server/actions/auth";
@@ -50,10 +51,10 @@ export function PortalRequestForm({ hotels, countries, preselectHotel }: { hotel
         <Input value={f.places} onChange={(e) => set("places", e.target.value)} />
       </Field>
       <Field label="من تاريخ">
-        <Input type="date" dir="ltr" className="num" value={f.date_from} onChange={(e) => set("date_from", e.target.value)} />
+        <DateInput value={f.date_from || null} onChange={(v) => set("date_from", v ?? "")} aria-label="من تاريخ" />
       </Field>
       <Field label="إلى تاريخ">
-        <Input type="date" dir="ltr" className="num" value={f.date_to} onChange={(e) => set("date_to", e.target.value)} />
+        <DateInput min={f.date_from || undefined} value={f.date_to || null} onChange={(v) => set("date_to", v ?? "")} aria-label="إلى تاريخ" />
       </Field>
       <div className="grid grid-cols-3 gap-3 sm:col-span-2">
         <Field label="البالغون">

@@ -3,10 +3,12 @@ import { UserFacingError } from "../errors";
 import { randomUUID } from "node:crypto";
 import type { Filter } from "mongodb";
 import { site, type Locale } from "@/content/site";
-import { addDays, todayDay } from "@/lib/dates";
+import { countryName } from "@/lib/countries";
+import { addDays, daysBetween, todayDay } from "@/lib/dates";
 import type { MediaRef } from "@/lib/media";
 import { quoteMargin, quoteTotals, type DiscountKind, type ItemKind, type ItemUnit, type PricingMode } from "@/lib/quote-math";
 import { pick, type Board, type QuoteStatus } from "@/lib/travel-labels";
+import { destinationsSpan, destinationsSummary, type TripDestination } from "@/lib/trip-destinations";
 import { col, contains, nextId, now, tx } from "../db";
 import { mediaById, mediaByIds } from "../media";
 import { audit, nextRef, randomToken } from "../security";
@@ -42,6 +44,8 @@ export interface QuoteHotelLine {
   rate: QuoteHotelRate | null;
 }
 
+export type QuoteDestination = TripDestination;
+
 export interface QuoteItem {
   kind: ItemKind;
   label: string;
@@ -70,6 +74,8 @@ export interface QuoteDoc {
   status: QuoteStatus;
   title: string;
   destination: string | null;
+  /** Absent on quotes saved before multi-destination support. */
+  destinations?: QuoteDestination[];
   intro: string | null;
   start_date: string | null;
   end_date: string | null;
@@ -141,6 +147,7 @@ export interface QuoteInput {
   locale: Locale;
   title: string;
   destination: string | null;
+  destinations: QuoteDestination[];
   intro: string | null;
   start_date: string | null;
   end_date: string | null;
@@ -254,7 +261,7 @@ export async function getQuoteEditor(id: number): Promise<QuoteEditorData | null
   const q = await getQuoteDoc(id);
   if (!q) return null;
   const { _id, created_by: _c, updated_by: _u, ...rest } = q;
-  return { ...rest, id: _id };
+  return { ...rest, destinations: rest.destinations ?? [], id: _id };
 }
 
 export async function quoteEvents(quoteId: number) {
@@ -463,7 +470,7 @@ export async function quoteDraftFromProgram(programId: number, locale: Locale, a
       .filter((s) => s.included === included)
       .map((s) => [name(s.service_id), pick(locale, s.note_ar, s.note_en)].filter(Boolean).join(" — "))
       .filter(Boolean);
-  const dests = await (await col<{ _id: number; name_ar: string; name_en: string }>("destinations")).find({ _id: { $in: p.destination_ids } }).toArray();
+  const dests = await (await col<{ _id: number; name_ar: string; name_en: string; country_code: string }>("destinations")).find({ _id: { $in: p.destination_ids } }).toArray();
   const options = optionId ? p.hotel_options.filter((o) => o.id === optionId) : p.hotel_options.slice(0, 1);
   const pax = Math.max(1, adults);
   const hotelsById = new Map((await (await col<HotelDoc>("hotels")).find({ _id: { $in: options.map((o) => o.hotel_id) } }, { projection: { name_ar: 1, name_en: 1 } }).toArray()).map((h) => [h._id, h]));
@@ -475,6 +482,11 @@ export async function quoteDraftFromProgram(programId: number, locale: Locale, a
       .filter(Boolean)
       .map((d) => pick(locale, d!.name_ar, d!.name_en))
       .join(locale === "ar" ? "، " : ", "),
+    // One row per program destination (in the program's order); the dates are set in the quote.
+    destinations: p.destination_ids
+      .map((id) => dests.find((d) => d._id === id))
+      .filter((d): d is NonNullable<typeof d> => !!d)
+      .map((d) => ({ country_code: d.country_code, city: pick(locale, d.name_ar, d.name_en) || null, entry_date: null as string | null, exit_date: null as string | null })),
     intro: pick(locale, p.summary_ar, p.summary_en) || null,
     currency: p.currency,
     cover: await mediaById(p.cover_media_id),
@@ -585,6 +597,7 @@ export interface QuoteView {
   audience: Audience;
   title: string;
   destination: string | null;
+  destinations: { countryCode: string; country: string; city: string | null; entryDate: string | null; exitDate: string | null; nights: number | null }[];
   intro: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -638,6 +651,15 @@ export async function buildQuoteView(q: QuoteDoc): Promise<QuoteView> {
   ]);
   const contact = company && q.contact_id ? (company.contacts.find((c) => c.id === q.contact_id) ?? null) : null;
   const ar = locale === "ar";
+  const destinations = (q.destinations ?? []).map((d) => ({
+    countryCode: d.country_code,
+    country: countryName(d.country_code, locale),
+    city: d.city,
+    entryDate: d.entry_date,
+    exitDate: d.exit_date,
+    nights: d.entry_date && d.exit_date ? daysBetween(d.entry_date, d.exit_date) : null,
+  }));
+  const span = destinationsSpan(q.destinations ?? []);
 
   const brand = await resolveBrand(q.branding, company, locale, settings);
 
@@ -662,10 +684,11 @@ export async function buildQuoteView(q: QuoteDoc): Promise<QuoteView> {
     canRespond: canRespond(q),
     audience: q.audience,
     title: q.title,
-    destination: q.destination,
+    destination: q.destination ?? (destinations.length ? destinationsSummary(q.destinations ?? [], locale) : null),
+    destinations,
     intro: q.intro,
-    startDate: q.start_date,
-    endDate: q.end_date,
+    startDate: q.start_date ?? span.start,
+    endDate: q.end_date ?? span.end,
     adults: q.adults,
     children: q.children,
     infants: q.infants,

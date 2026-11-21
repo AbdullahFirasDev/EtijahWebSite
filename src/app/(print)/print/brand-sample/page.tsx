@@ -38,6 +38,7 @@ export default async function BrandSamplePage({ searchParams }: { searchParams: 
     audience: "company",
     title: ar ? "نموذج للمعاينة فقط — عنوان العرض" : "Preview sample only — offer title",
     destination: ar ? "الوجهة" : "Destination",
+    destinations: [],
     intro: ar ? "هذه صفحة نموذجية لمعاينة الهوية البصرية (الشعار والألوان والاسم وبيانات التواصل) على القالب الموحد. ليست عرضاً حقيقياً." : "Sample page to preview the visual identity on the unified template. Not a real offer.",
     startDate: addDays(todayDay(), 30),
     endDate: addDays(todayDay(), 37),

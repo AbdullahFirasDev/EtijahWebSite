@@ -3,6 +3,7 @@
 import {
   BadgePercent,
   BedDouble,
+  Binoculars,
   BookOpenCheck,
   Building2,
   ChartColumn,
@@ -85,6 +86,7 @@ export function StaffShell({ user, badges, children }: { user: { name: string; r
           { href: "/staff/destinations/", label: "الدول والوجهات", icon: <Globe2 className={ic} />, permission: "programs.view", keywords: "مدن دول" },
           { href: "/staff/hotels/", label: "مكتبة الفنادق", icon: <BedDouble className={ic} />, permission: "hotels.view", keywords: "فندق أسعار غرف" },
           { href: "/staff/services/", label: "الخدمات", icon: <ListChecks className={ic} />, permission: "programs.view" },
+          { href: "/staff/tours/", label: "الجولات المسجلة", icon: <Binoculars className={ic} />, permission: "programs.view", keywords: "جولة رحلة يومية tour excursion" },
           { href: "/staff/requests/", label: "طلبات المسافرين", icon: <Inbox className={ic} />, permission: "leads.view", badge: badges.leads, keywords: "حجز طلب" },
         ],
       },

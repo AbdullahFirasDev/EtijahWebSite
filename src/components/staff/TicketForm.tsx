@@ -8,7 +8,7 @@ import { todayDay } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { createTicketAction, previewTicketAction } from "@/server/actions/airlines";
 import { ISSUE_METHOD_OPTIONS } from "./AirlineEditor";
-import { MoneyInput } from "./fields";
+import { DateInput, MoneyInput } from "./fields";
 import { Badge, Button, Card, CardHeader, Field, Input, Select, Textarea, Toggle } from "./ui";
 import { useActionRunner } from "./useActionRunner";
 
@@ -168,7 +168,7 @@ export function TicketForm({ airlines, companies, currencies }: { airlines: { id
             </Select>
           </Field>
           <Field label="تاريخ الإصدار" required hint="تُطبق العمولات السارية في هذا التاريخ.">
-            <Input type="date" dir="ltr" className="num" value={f.issued_at} onChange={(e) => set("issued_at", e.target.value)} data-ticket-date />
+            <DateInput value={f.issued_at || null} onChange={(v) => set("issued_at", v ?? "")} aria-label="تاريخ الإصدار" data-ticket-date />
           </Field>
           <Field label="رقم التذكرة" required>
             <Input dir="ltr" className="num" value={f.ticket_number} onChange={(e) => set("ticket_number", e.target.value)} data-ticket-number />

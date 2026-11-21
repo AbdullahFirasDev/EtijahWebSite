@@ -9,6 +9,7 @@ import { formatDateTime } from "@/lib/dates";
 import { waLink } from "@/lib/phone";
 import type { QuoteStatus } from "@/lib/travel-labels";
 import { deleteQuoteAction, duplicateQuoteAction, markQuoteSentAction, quoteLinkAction, setQuoteStatusAction } from "@/server/actions/quotes";
+import { DateInput } from "./fields";
 import { useToast } from "./Toaster";
 import { Button, Card, CardHeader, Field, Input } from "./ui";
 import { useActionRunner } from "./useActionRunner";
@@ -152,7 +153,7 @@ export function QuoteSharePanel({ meta, contact, company, title, locale, canDele
         <div className="grid gap-3 p-4">
           <Field label="ينتهي الرابط في" htmlFor="link-exp" hint="اتركه فارغاً لرابط بلا انتهاء.">
             <div className="flex gap-2">
-              <Input id="link-exp" type="date" dir="ltr" value={expiry} onChange={(e) => setExpiry(e.target.value)} className="h-10" />
+              <DateInput id="link-exp" value={expiry || null} onChange={(v) => setExpiry(v ?? "")} inputClassName="h-10" />
               <Button size="sm" className="h-10 shrink-0" onClick={() => run(() => quoteLinkAction({ id: meta.id, action: "expiry", expires: expiry || null }))}>
                 حفظ
               </Button>

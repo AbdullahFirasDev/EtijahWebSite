@@ -13,6 +13,7 @@ export const COLLECTIONS = [
   "media",
   "destinations",
   "services",
+  "tours",
   "hotels",
   "programs",
   "departures",
@@ -56,6 +57,7 @@ export const INDEXES: Partial<Record<CollectionName, IndexDef[]>> = {
   media: [[{ created_at: -1 }, named("recent")]],
   destinations: [[{ slug: 1 }, unique("slug_unique")], [{ country_code: 1, name_ar: 1 }, named("country")]],
   services: [[{ sort: 1 }, named("sort")]],
+  tours: [[{ active: 1, country_code: 1, name_ar: 1 }, named("country")]],
   hotels: [
     [{ slug: 1 }, unique("slug_unique")],
     [{ destination_id: 1 }, named("destination")],

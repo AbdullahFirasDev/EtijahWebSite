@@ -1,5 +1,6 @@
 import { Plus, Ticket } from "lucide-react";
 import Link from "next/link";
+import { DateInput } from "@/components/staff/fields";
 import { Badge, Card, EmptyState, Input, LinkButton, PageHeader, Select, Table } from "@/components/staff/ui";
 import { ruleLabel } from "@/lib/commission-math";
 import { formatDay } from "@/lib/dates";
@@ -53,8 +54,8 @@ export default async function TicketsPage({ searchParams }: { searchParams: Prom
               </option>
             ))}
           </Select>
-          <Input type="date" name="from" dir="ltr" defaultValue={sp.from} aria-label="من" className="num" />
-          <Input type="date" name="to" dir="ltr" defaultValue={sp.to} aria-label="إلى" className="num" />
+          <DateInput name="from" defaultValue={sp.from ?? null} aria-label="من" className="w-40" />
+          <DateInput name="to" defaultValue={sp.to ?? null} aria-label="إلى" className="w-40" />
           <Select name="payment" defaultValue={sp.payment ?? ""} aria-label="الدفع">
             <option value="">كل حالات الدفع</option>
             {PAYMENT_STATUSES.map((p) => (

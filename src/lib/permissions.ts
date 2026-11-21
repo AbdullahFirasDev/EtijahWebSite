@@ -14,7 +14,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_HINTS: Record<Role, string> = {
   admin: "صلاحيات كاملة، بما فيها المستخدمون والإعدادات والحذف.",
-  tourism_manager: "الفنادق وأسعارها، الوجهات، البرامج والكروبات وأسعارها ونشرها، وطلبات المسافرين.",
+  tourism_manager: "الفنادق وأسعارها، الوجهات، الجولات المسجلة، البرامج والكروبات وأسعارها ونشرها، وطلبات المسافرين.",
   sales: "طلبات المسافرين، الشركات وحساباتها، وعروض الأسعار. يطّلع على الفنادق والبرامج دون تعديلها.",
   accountant: "شركات الطيران، عمولات الشركات وعمولات الاتجاه، سجلات الإصدار والتسديد، والتقارير المالية.",
   content: "صور ونصوص البرامج والوجهات والخدمات ونشرها، دون تعديل الأسعار.",
@@ -31,6 +31,7 @@ export const PERMISSIONS = [
   "pricing.override",
   "destinations.edit",
   "services.edit",
+  "tours.edit",
   "media.upload",
   // Hotels library
   "hotels.view",
@@ -72,6 +73,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "pricing.override",
     "destinations.edit",
     "services.edit",
+    "tours.edit",
     "media.upload",
     "hotels.view",
     "hotels.edit",

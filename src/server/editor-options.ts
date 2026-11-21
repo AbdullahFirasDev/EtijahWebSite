@@ -4,6 +4,7 @@ import { COUNTRY_CODES, countryName } from "@/lib/countries";
 import { airlineOptions } from "./repo/airlines";
 import { hotelPickerOptions, listDestinations, listServices } from "./repo/catalog";
 import { getSettings } from "./repo/settings";
+import { listTours } from "./repo/tours";
 
 const COUNTRY_ORDER = new Map(COUNTRY_CODES.map((c, i) => [c, i]));
 const byCountryOrder = (a: string, b: string) => (COUNTRY_ORDER.get(a) ?? 999) - (COUNTRY_ORDER.get(b) ?? 999);
@@ -22,12 +23,13 @@ export async function destinationOptions(opts: { activeOnly?: boolean } = {}) {
 
 /** Option lists for the program wizard. Hotel costs are included only for roles allowed to see them. */
 export async function catalogOptions(opts: { includeCosts: boolean }) {
-  const [geo, hotels, services, settings, airlines] = await Promise.all([
+  const [geo, hotels, services, settings, airlines, tours] = await Promise.all([
     destinationOptions(),
     hotelPickerOptions(opts),
     listServices(true),
     getSettings(),
     airlineOptions(),
+    listTours({ activeOnly: true }),
   ]);
   return {
     // Inactive destinations stay listed (marked) so a program that already uses one keeps it visible.
@@ -35,6 +37,7 @@ export async function catalogOptions(opts: { includeCosts: boolean }) {
     countries: geo.countries,
     hotels,
     services: services.map((s) => ({ id: s.id, icon: s.icon, name_ar: s.name_ar })),
+    tours: tours.map((t) => ({ id: t.id, country_code: t.country_code, city_ar: t.city_ar, city_en: t.city_en, name_ar: t.name_ar, name_en: t.name_en, description_ar: t.description_ar, description_en: t.description_en, duration_ar: t.duration_ar, duration_en: t.duration_en })),
     currencies: settings.currencies as string[],
     defaultCurrency: settings.default_currency as string,
     airlines,

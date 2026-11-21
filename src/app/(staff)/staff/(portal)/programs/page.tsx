@@ -1,6 +1,7 @@
 import { Eye, FileDown, MapPinned, Plus } from "lucide-react";
 import Link from "next/link";
 import { ProgramStatusBadge } from "@/components/staff/StatusBadge";
+import { DateInput } from "@/components/staff/fields";
 import { Badge, Card, EmptyState, Input, LinkButton, PageHeader, Select, Table } from "@/components/staff/ui";
 import { countryName, flag } from "@/lib/countries";
 import { formatDay, timeAgo } from "@/lib/dates";
@@ -153,10 +154,10 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Pro
             ))}
           </Select>
           <label className="flex items-center gap-1 text-xs font-bold text-muted">
-            من <Input type="date" name="from" dir="ltr" defaultValue={sp.from} aria-label="تاريخ السفر من" className="num h-11 px-2" />
+            من <DateInput name="from" defaultValue={sp.from ?? null} aria-label="تاريخ السفر من" className="w-40" />
           </label>
           <label className="flex items-center gap-1 text-xs font-bold text-muted">
-            إلى <Input type="date" name="to" dir="ltr" defaultValue={sp.to} aria-label="تاريخ السفر إلى" className="num h-11 px-2" />
+            إلى <DateInput name="to" defaultValue={sp.to ?? null} aria-label="تاريخ السفر إلى" className="w-40" />
           </label>
           <Input name="min" inputMode="numeric" dir="ltr" defaultValue={sp.min} placeholder="السعر من" aria-label="السعر من" className="num" />
           <Input name="max" inputMode="numeric" dir="ltr" defaultValue={sp.max} placeholder="السعر إلى" aria-label="السعر إلى" className="num" />

@@ -1,8 +1,149 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { CalendarDays, Plus, Trash2 } from "lucide-react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { Button, Field, Input, inputClass, Textarea } from "./ui";
+
+const toLatinDigits = (s: string) => s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0));
+
+/** "2026-1-5", "2026/01/05", "20260105" → "2026-01-05" when it is a real calendar date; otherwise null. */
+export function parseDateText(raw: string): string | null {
+  const s = toLatinDigits(raw).trim();
+  const m = /^(\d{4})[-/.\s]?(\d{1,2})[-/.\s]?(\d{1,2})$/.exec(s) ?? /^(\d{4})(\d{2})(\d{2})$/.exec(s);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (y < 1900 || y > 2200 || mo < 1 || mo > 12 || d < 1) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCMonth() !== mo - 1) return null;
+  return `${m[1]}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/**
+ * Date field always written year first: YYYY-MM-DD (السنة-الشهر-اليوم), whatever the browser
+ * language. Typing digits inserts the dashes; the calendar button opens the native picker.
+ * Controlled (value + onChange) or, inside a GET form, uncontrolled (name + defaultValue).
+ */
+export function DateInput({
+  value,
+  defaultValue,
+  onChange,
+  name,
+  id,
+  min,
+  max,
+  disabled,
+  className = "",
+  inputClassName = "",
+  ...rest
+}: {
+  value?: string | null;
+  defaultValue?: string | null;
+  onChange?: (v: string | null) => void;
+  name?: string;
+  id?: string;
+  min?: string;
+  max?: string;
+  disabled?: boolean;
+  className?: string;
+  inputClassName?: string;
+  "aria-label"?: string;
+  "aria-invalid"?: boolean;
+} & { [data: `data-${string}`]: string | boolean | undefined }) {
+  const controlled = value !== undefined;
+  const [inner, setInner] = useState<string | null>(defaultValue ?? null);
+  const current = controlled ? (value ?? null) : inner;
+  const [text, setText] = useState(current ?? "");
+  const [seen, setSeen] = useState(current);
+  const [invalid, setInvalid] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
+  // An outside change (another field filled this date) replaces what is shown.
+  if (current !== seen) {
+    setSeen(current);
+    setText(current ?? "");
+    setInvalid(false);
+  }
+
+  const emit = (v: string | null) => {
+    setSeen(v);
+    if (!controlled) setInner(v);
+    onChange?.(v);
+  };
+
+  return (
+    <div className={`relative ${className}`} dir="ltr">
+      <Input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        lang="en"
+        dir="ltr"
+        autoComplete="off"
+        placeholder="YYYY-MM-DD"
+        title="السنة-الشهر-اليوم"
+        maxLength={10}
+        disabled={disabled}
+        value={text}
+        {...rest}
+        aria-invalid={invalid || rest["aria-invalid"] || undefined}
+        className={`num pe-10 text-left tracking-wide ${invalid ? "border-danger" : ""} ${inputClassName}`}
+        onChange={(e) => {
+          let t = toLatinDigits(e.target.value).replace(/[/.\s]/g, "-").replace(/[^\d-]/g, "");
+          const deleting = (e.nativeEvent as InputEvent).inputType?.startsWith("delete");
+          if (!deleting && /^\d{5,8}$/.test(t)) t = `${t.slice(0, 4)}-${t.slice(4, 6)}${t.length > 6 ? `-${t.slice(6)}` : ""}`;
+          if (!deleting && (/^\d{4}$/.test(t) || /^\d{4}-\d{2}$/.test(t))) t += "-";
+          t = t.slice(0, 10);
+          setText(t);
+          setInvalid(false);
+          if (t === "") emit(null);
+          else if (/^\d{4}-\d{2}-\d{2}$/.test(t) && parseDateText(t)) emit(t);
+        }}
+        onBlur={() => {
+          if (!text) return;
+          const v = parseDateText(text);
+          if (v) {
+            setText(v);
+            if (v !== current) emit(v);
+          } else setInvalid(true);
+        }}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        disabled={disabled}
+        aria-label="اختيار من التقويم"
+        className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted hover:text-brand-700 disabled:opacity-50"
+        onClick={() => {
+          const el = picker.current;
+          if (!el) return;
+          try {
+            el.showPicker();
+          } catch {
+            el.focus();
+          }
+        }}
+      >
+        <CalendarDays className="size-4" aria-hidden="true" />
+      </button>
+      <input
+        ref={picker}
+        type="date"
+        tabIndex={-1}
+        aria-hidden="true"
+        min={min}
+        max={max}
+        value={current ?? ""}
+        onChange={(e) => {
+          const v = e.target.value || null;
+          setText(v ?? "");
+          setInvalid(false);
+          emit(v);
+        }}
+        className="pointer-events-none absolute right-0 bottom-0 h-px w-10 opacity-0"
+      />
+      {name ? <input type="hidden" name={name} value={current ?? ""} /> : null}
+    </div>
+  );
+}
 
 /** Arabic + English inputs side by side (Arabic RTL, English LTR). */
 export function Bilingual({

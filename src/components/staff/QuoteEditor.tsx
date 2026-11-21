@@ -4,12 +4,14 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  Binoculars,
   Building2,
   Download,
   Eye,
   FileDown,
   Import,
   Lock,
+  MapPin,
   Plus,
   Save,
   Tag,
@@ -18,16 +20,20 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { quoteDict } from "@/content/quote";
 import { asset } from "@/lib/asset";
+import { COUNTRY_CODES, countryName } from "@/lib/countries";
 import { addDays, daysBetween } from "@/lib/dates";
 import type { MediaRef } from "@/lib/media";
 import { CURRENCIES, formatMoney, type CurrencyCode } from "@/lib/money";
 import { quoteMargin, quoteTotals, type DiscountKind, type ItemKind, type ItemUnit, type PricingMode } from "@/lib/quote-math";
 import { BOARD_LABELS, BOARDS, ITEM_UNITS, RATE_BASIS_LABELS, UNIT_LABELS, type Board, type QuoteStatus } from "@/lib/travel-labels";
+import { destinationsSpan, destinationsSummary, type TripDestination } from "@/lib/trip-destinations";
 import type { HotelPickerOption } from "@/server/repo/catalog";
+import type { TourItem } from "@/server/repo/tours";
 import { programDraftForQuoteAction, saveQuoteAction } from "@/server/actions/quotes";
 import { CompanyEditor, emptyCompanyForm } from "./CompanyEditor";
-import { MoneyInput, NumberInput, StringList } from "./fields";
+import { DateInput, MoneyInput, NumberInput, StringList } from "./fields";
 import { ImagePicker } from "./ImagePicker";
 import { Modal } from "./Modal";
 import { QuoteSharePanel, type QuoteMeta } from "./QuoteSharePanel";
@@ -70,6 +76,8 @@ export interface QuoteFormState {
   locale: "ar" | "en";
   title: string;
   destination: string | null;
+  /** Countries / cities of the trip, each with its own entry and exit date. */
+  destinations: TripDestination[];
   intro: string | null;
   start_date: string | null;
   end_date: string | null;
@@ -108,6 +116,10 @@ interface Props {
   }[];
   programs: { id: number; label: string; type?: string; options?: { id: string; label: string }[] }[];
   hotels: HotelPickerOption[];
+  /** Library places (cities / areas) suggested per country. */
+  places: { country_code: string; name_ar: string; name_en: string }[];
+  /** Pre-registered tours (active). */
+  tours: TourItem[];
   currencies: string[];
   defaultTerms: { ar: string; en: string };
   canDelete: boolean;
@@ -122,7 +134,7 @@ const KIND_META: Record<ItemKind, { label: string; hint: string }> = {
   option: { label: "خدمات اختيارية", hint: "تظهر للعميل بأسعارها ولا تدخل في الإجمالي." },
 };
 
-export function QuoteEditor({ initial, meta, companies, programs, hotels, currencies, defaultTerms, canDelete }: Props) {
+export function QuoteEditor({ initial, meta, companies, programs, hotels, places, tours, currencies, defaultTerms, canDelete }: Props) {
   const [f, setF] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [companyModal, setCompanyModal] = useState(false);
@@ -135,6 +147,32 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
   const dirty = useMemo(() => JSON.stringify(f) !== saved, [f, saved]);
 
   const set = <K extends keyof QuoteFormState>(key: K, v: QuoteFormState[K]) => setF((x) => ({ ...x, [key]: v }));
+  /**
+   * Destinations drive the summary line and the trip dates while staff have not typed their own:
+   * a value still equal to what the previous rows produced follows the new rows.
+   */
+  const setDests = (rows: TripDestination[]) =>
+    setF((x) => {
+      const before = { text: destinationsSummary(x.destinations, x.locale), ...destinationsSpan(x.destinations) };
+      const after = { text: destinationsSummary(rows, x.locale), ...destinationsSpan(rows) };
+      return {
+        ...x,
+        destinations: rows,
+        destination: !x.destination || x.destination === before.text ? after.text || null : x.destination,
+        start_date: !x.start_date || x.start_date === before.start ? (after.start ?? x.start_date) : x.start_date,
+        end_date: !x.end_date || x.end_date === before.end ? (after.end ?? x.end_date) : x.end_date,
+      };
+    });
+  const addDest = () => {
+    const last = f.destinations.at(-1);
+    setDests([
+      ...f.destinations,
+      last
+        ? { country_code: last.country_code, city: null, entry_date: last.exit_date, exit_date: null }
+        : { country_code: "TR", city: null, entry_date: f.start_date, exit_date: f.end_date },
+    ]);
+  };
+  const placeName = (p: { name_ar: string; name_en: string }) => (f.locale === "ar" ? p.name_ar : p.name_en || p.name_ar);
   const company = companies.find((c) => c.id === f.company_id) ?? null;
   const contact = company?.contacts.find((c) => c.id === f.contact_id) ?? null;
   const ar = f.locale === "ar";
@@ -183,6 +221,11 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
           program_id: d.program_id,
           title: d.title,
           destination: d.destination,
+          // The program's places, keeping dates already entered for the same country/city.
+          destinations: d.destinations.map((r, i, all) => {
+            const same = x.destinations.find((o) => o.country_code === r.country_code && (!o.city || o.city === r.city));
+            return { ...r, entry_date: same?.entry_date ?? (i === 0 ? x.start_date : null), exit_date: same?.exit_date ?? (i === all.length - 1 && x.start_date ? addDays(x.start_date, Math.max(0, d.duration_days - 1)) : null) };
+          }),
           intro: d.intro,
           currency: currencies.includes(d.currency) ? d.currency : x.currency,
           cover: d.cover ?? x.cover,
@@ -212,6 +255,30 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
   const addItem = (kind: ItemKind) =>
     set("items", [...f.items, { key: k(), kind, label: "", description: null, unit: kind === "main" ? "person" : "group", quantity: kind === "main" ? Math.max(1, f.adults) : 1, unit_price: null, unit_cost: null }]);
   const qtyFor = (unit: ItemUnit) => (unit === "person" ? f.adults : unit === "child" ? f.children : unit === "room" ? f.rooms : unit === "night" && f.start_date && f.end_date ? daysBetween(f.start_date, f.end_date) : 1);
+
+  /** Adds a pre-registered tour to a day (new or existing) and, optionally, as a price line. */
+  const addTour = (tour: TourItem, target: number | "new", priceAs: "main" | "option" | "none") => {
+    const pickL = (a: string | null, e: string | null) => (ar ? a : e || a);
+    const name = pickL(tour.name_ar, tour.name_en) ?? tour.name_ar;
+    const city = pickL(tour.city_ar, tour.city_en);
+    const duration = pickL(tour.duration_ar, tour.duration_en);
+    const details = [pickL(tour.description_ar, tour.description_en), duration ? `${ar ? "المدة" : "Duration"}: ${duration}` : null].filter(Boolean).join("\n") || null;
+    const priced = priceAs !== "none" && tour.price > 0 && tour.currency === f.currency;
+    setF((x) => ({
+      ...x,
+      days:
+        target === "new"
+          ? [...x.days, { title: name, body: details }]
+          : x.days.map((d, j) => {
+              if (j !== target) return d;
+              if (!d.title.trim()) return { title: name, body: [d.body, details].filter(Boolean).join("\n") || null };
+              return { ...d, body: [d.body, `• ${name}${details ? `\n${details}` : ""}`].filter(Boolean).join("\n") };
+            }),
+      items: priced
+        ? [...x.items, { key: k(), kind: priceAs as ItemKind, label: `${name}${city ? ` (${city})` : ""}`, description: duration, unit: "person", quantity: Math.max(1, x.adults), unit_price: tour.price, unit_cost: tour.cost }]
+        : x.items,
+    }));
+  };
 
   const err = (p: string) => errors[`quote.${p}`];
   const errorList = Object.values(errors);
@@ -393,15 +460,83 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
             <Field label="عنوان العرض" required error={err("title")} className="sm:col-span-2" htmlFor="q-title">
               <Input id="q-title" value={f.title} onChange={(e) => set("title", e.target.value)} placeholder={ar ? "رحلة تحفيزية لفريق المبيعات إلى إسطنبول" : "Sales team incentive trip to Istanbul"} />
             </Field>
-            <Field label="الوجهة" htmlFor="q-dest">
+            <div className="sm:col-span-2" data-quote-destinations>
+              <p className="mb-2 text-sm font-bold text-brand-950">
+                الوجهات والدول <span className="font-semibold text-muted">· أضف دولة أو أكثر، ولكل وجهة تاريخ دخول وتاريخ خروج</span>
+              </p>
+              {f.destinations.length ? (
+                <ol className="grid gap-2">
+                  {f.destinations.map((d, i) => {
+                    const upd = (patch: Partial<TripDestination>) => setDests(f.destinations.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+                    const nights = d.entry_date && d.exit_date ? daysBetween(d.entry_date, d.exit_date) : null;
+                    return (
+                      <li key={i} className="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-2" data-destination-row>
+                        <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-2">
+                          <span className="flex items-center gap-2 text-sm font-extrabold text-brand-950">
+                            <span className="num grid size-7 place-items-center rounded-lg bg-brand-600 text-xs font-bold text-white">{i + 1}</span>
+                            {[d.city, countryName(d.country_code, "ar")].filter(Boolean).join("، ")}
+                            {nights != null ? <Badge tone={nights < 0 ? "danger" : "brand"}>{nights < 0 ? "الخروج قبل الدخول" : quoteDict.ar.nights(nights)}</Badge> : null}
+                          </span>
+                          <span className="flex gap-1">
+                            <Button size="sm" variant="ghost" aria-label="تقديم الوجهة" disabled={i === 0} onClick={() => setDests(f.destinations.map((x, j, a) => (j === i - 1 ? a[i] : j === i ? a[i - 1] : x)))}>
+                              <ArrowUp className="size-4" aria-hidden="true" />
+                            </Button>
+                            <Button size="sm" variant="ghost" aria-label="تأخير الوجهة" disabled={i === f.destinations.length - 1} onClick={() => setDests(f.destinations.map((x, j, a) => (j === i + 1 ? a[i] : j === i ? a[i + 1] : x)))}>
+                              <ArrowDown className="size-4" aria-hidden="true" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="text-danger" aria-label={`حذف الوجهة ${i + 1}`} onClick={() => setDests(f.destinations.filter((_, j) => j !== i))}>
+                              <Trash2 className="size-4" aria-hidden="true" />
+                            </Button>
+                          </span>
+                        </div>
+                        <Field label="الدولة" htmlFor={`qd-c-${i}`}>
+                          <Select id={`qd-c-${i}`} value={d.country_code} onChange={(e) => upd({ country_code: e.target.value, city: null })} data-dest-country>
+                            {COUNTRY_CODES.map((c) => (
+                              <option key={c} value={c}>
+                                {countryName(c, "ar")}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field label="المدينة / المنطقة (اختياري)" htmlFor={`qd-city-${i}`}>
+                          <Input id={`qd-city-${i}`} list={`qd-places-${d.country_code}`} dir={ar ? "rtl" : "ltr"} value={d.city ?? ""} onChange={(e) => upd({ city: e.target.value || null })} placeholder={ar ? "إسطنبول" : "Istanbul"} data-dest-city />
+                        </Field>
+                        <Field label="تاريخ الدخول" htmlFor={`qd-in-${i}`}>
+                          <DateInput id={`qd-in-${i}`} value={d.entry_date} onChange={(v) => upd({ entry_date: v, exit_date: v && d.exit_date && d.exit_date < v ? null : d.exit_date })} data-dest-entry />
+                        </Field>
+                        <Field label="تاريخ الخروج" htmlFor={`qd-out-${i}`}>
+                          <DateInput id={`qd-out-${i}`} min={d.entry_date ?? undefined} value={d.exit_date} onChange={(v) => upd({ exit_date: v })} data-dest-exit />
+                        </Field>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <p className="rounded-xl border border-dashed border-line px-4 py-4 text-sm text-muted">لا توجد وجهات بعد. أضف الدولة الأولى، ثم دولاً أو مدناً أخرى بتواريخ دخول وخروج خاصة بكل منها.</p>
+              )}
+              {[...new Set(f.destinations.map((d) => d.country_code))].map((code) => (
+                <datalist key={code} id={`qd-places-${code}`}>
+                  {places
+                    .filter((p) => p.country_code === code)
+                    .map((p) => (
+                      <option key={p.name_ar} value={placeName(p)} />
+                    ))}
+                </datalist>
+              ))}
+              {err("destinations") ? <p className="mt-1.5 text-xs font-bold text-danger">{err("destinations")}</p> : null}
+              <Button size="sm" variant="subtle" className="mt-2" onClick={addDest} data-add-destination>
+                <MapPin className="size-4" aria-hidden="true" /> إضافة وجهة / دولة
+              </Button>
+            </div>
+            <Field label="الوجهة (سطر الملخص)" htmlFor="q-dest" hint={f.destinations.length ? "يُكتب تلقائياً من الوجهات أعلاه، ويمكنك تعديله." : undefined}>
               <Input id="q-dest" value={f.destination ?? ""} onChange={(e) => set("destination", e.target.value)} placeholder={ar ? "إسطنبول وبورصة، تركيا" : "Istanbul & Bursa, Türkiye"} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="تاريخ السفر" htmlFor="q-start" error={err("start_date")}>
-                <Input id="q-start" type="date" dir="ltr" value={f.start_date ?? ""} onChange={(e) => set("start_date", e.target.value || null)} />
+                <DateInput id="q-start" value={f.start_date} onChange={(v) => set("start_date", v)} />
               </Field>
               <Field label="تاريخ العودة" htmlFor="q-end" error={err("end_date")}>
-                <Input id="q-end" type="date" dir="ltr" min={f.start_date ?? undefined} value={f.end_date ?? ""} onChange={(e) => set("end_date", e.target.value || null)} />
+                <DateInput id="q-end" min={f.start_date ?? undefined} value={f.end_date} onChange={(v) => set("end_date", v)} />
               </Field>
             </div>
             <Field label="مقدمة العرض" className="sm:col-span-2" htmlFor="q-intro">
@@ -451,23 +586,10 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
                       </Select>
                     </Field>
                     <Field label="الوصول" htmlFor={`qh-in-${i}`}>
-                      <Input
-                        id={`qh-in-${i}`}
-                        type="date"
-                        dir="ltr"
-                        value={h.check_in ?? ""}
-                        onChange={(e) => upd({ check_in: e.target.value || null, nights: e.target.value && h.check_out ? Math.max(1, daysBetween(e.target.value, h.check_out)) : h.nights })}
-                      />
+                      <DateInput id={`qh-in-${i}`} value={h.check_in} onChange={(v) => upd({ check_in: v, nights: v && h.check_out ? Math.max(1, daysBetween(v, h.check_out)) : h.nights })} />
                     </Field>
                     <Field label="المغادرة" htmlFor={`qh-out-${i}`}>
-                      <Input
-                        id={`qh-out-${i}`}
-                        type="date"
-                        dir="ltr"
-                        min={h.check_in ?? undefined}
-                        value={h.check_out ?? ""}
-                        onChange={(e) => upd({ check_out: e.target.value || null, nights: h.check_in && e.target.value ? Math.max(1, daysBetween(h.check_in, e.target.value)) : h.nights })}
-                      />
+                      <DateInput id={`qh-out-${i}`} min={h.check_in ?? undefined} value={h.check_out} onChange={(v) => upd({ check_out: v, nights: h.check_in && v ? Math.max(1, daysBetween(h.check_in, v)) : h.nights })} />
                     </Field>
                     <Field label="الليالي" htmlFor={`qh-n-${i}`}>
                       <NumberInput id={`qh-n-${i}`} min={1} value={h.nights} onChange={(v) => upd({ nights: v ?? 1 })} />
@@ -556,15 +678,27 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
                 );
               })}
             </ul>
-            <Button size="sm" variant="subtle" className="mt-3" data-add-quote-hotel onClick={() => set("hotels", [...f.hotels, { id: null, hotel_id: null, check_in: f.start_date, check_out: f.end_date, nights: f.start_date && f.end_date ? Math.max(1, daysBetween(f.start_date, f.end_date)) : 1, room_type: null, board: "BB", rooms: f.rooms || null, rate: null }])}>
+            <Button
+              size="sm"
+              variant="subtle"
+              className="mt-3"
+              data-add-quote-hotel
+              onClick={() => {
+                const stay = f.destinations.find((d) => d.entry_date && d.exit_date && !f.hotels.some((h) => h.check_in === d.entry_date)) ?? null;
+                const from = stay ? stay.entry_date : f.start_date;
+                const to = stay ? stay.exit_date : f.end_date;
+                set("hotels", [...f.hotels, { id: null, hotel_id: null, check_in: from, check_out: to, nights: from && to ? Math.max(1, daysBetween(from, to)) : 1, room_type: null, board: "BB", rooms: f.rooms || null, rate: null }]);
+              }}
+            >
               <Plus className="size-4" aria-hidden="true" /> إضافة فندق
             </Button>
           </div>
         </Card>
 
         <Card>
-          <CardHeader title="البرنامج اليومي" />
+          <CardHeader title="البرنامج اليومي" description="أضف الأيام يدوياً، أو أضف جولة مسجلة مسبقاً إلى يوم جديد أو موجود مع سعرها." />
           <div className="p-5" dir={ar ? "rtl" : "ltr"}>
+            <TourPicker tours={tours} quote={f} onAdd={addTour} />
             <ol className="grid gap-3">
               {f.days.map((d, i) => (
                 <li key={i} className="grid gap-2 rounded-xl border border-line p-3">
@@ -781,7 +915,7 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
           <CardHeader title="الصلاحية والملاحظات والشروط" />
           <div className="grid gap-4 p-5 sm:grid-cols-2">
             <Field label="العرض صالح حتى" required htmlFor="q-valid" error={err("valid_until")} hint="بعد هذا التاريخ يصبح العرض منتهي الصلاحية ولا يمكن قبوله.">
-              <Input id="q-valid" type="date" dir="ltr" value={f.valid_until} onChange={(e) => set("valid_until", e.target.value)} />
+              <DateInput id="q-valid" value={f.valid_until} onChange={(v) => set("valid_until", v ?? "")} />
             </Field>
             <div />
             <Field label="ملاحظات للعميل" className="sm:col-span-2" htmlFor="q-notes">
@@ -868,6 +1002,80 @@ export function QuoteEditor({ initial, meta, companies, programs, hotels, curren
           }}
         />
       </Modal>
+    </div>
+  );
+}
+
+/** Chooses a pre-registered tour (countries of this quote first) and where to put it. */
+function TourPicker({ tours, quote, onAdd }: { tours: TourItem[]; quote: QuoteFormState; onAdd: (tour: TourItem, target: number | "new", priceAs: "main" | "option" | "none") => void }) {
+  const [tourId, setTourId] = useState("");
+  const [target, setTarget] = useState("new");
+  const [priceAs, setPriceAs] = useState<"main" | "option" | "none">("option");
+  const tour = tours.find((t) => String(t.id) === tourId) ?? null;
+  const tripCountries = [...new Set(quote.destinations.map((d) => d.country_code))];
+  const countries = [...new Set([...tripCountries.filter((c) => tours.some((t) => t.country_code === c)), ...tours.map((t) => t.country_code)])];
+  if (!tours.length) {
+    return (
+      <p className="mb-4 flex items-center gap-2 rounded-xl bg-mist px-3 py-2.5 text-xs text-muted" dir="rtl">
+        <Binoculars className="size-4" aria-hidden="true" /> لا توجد جولات مسجلة بعد. سجّلها من «الجولات المسجلة» لتضيفها هنا بنقرة.
+      </p>
+    );
+  }
+  return (
+    <div className="mb-4 grid gap-3 rounded-xl bg-mist p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end" dir="rtl" data-tour-picker>
+      <Field label={<span className="inline-flex items-center gap-1"><Binoculars className="size-4 text-brand-600" aria-hidden="true" /> جولة مسجلة</span>} htmlFor="q-tour" className="sm:col-span-3">
+        <Select id="q-tour" value={tourId} onChange={(e) => setTourId(e.target.value)} data-tour-select>
+          <option value="">اختر جولة…</option>
+          {countries.map((c) => (
+            <optgroup key={c} label={`${countryName(c, "ar")}${tripCountries.includes(c) ? " · ضمن وجهات العرض" : ""}`}>
+              {tours
+                .filter((t) => t.country_code === c)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name_ar}
+                    {t.city_ar ? ` — ${t.city_ar}` : ""}
+                    {t.price ? ` · ${formatMoney(t.price, t.currency, "ar")}` : ""}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </Select>
+      </Field>
+      <Field label="إضافة إلى" htmlFor="q-tour-day">
+        <Select id="q-tour-day" value={target} onChange={(e) => setTarget(e.target.value)} data-tour-day>
+          <option value="new">يوم جديد في آخر البرنامج</option>
+          {quote.days.map((d, i) => (
+            <option key={i} value={i}>
+              اليوم {i + 1}
+              {d.title ? ` — ${d.title.slice(0, 40)}` : ""}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="السعر في العرض" htmlFor="q-tour-price">
+        <Select id="q-tour-price" value={priceAs} onChange={(e) => setPriceAs(e.target.value as typeof priceAs)} data-tour-price>
+          <option value="option">خدمة اختيارية (خارج الإجمالي)</option>
+          <option value="main">بند أساسي (ضمن الإجمالي)</option>
+          <option value="none">بدون سعر</option>
+        </Select>
+      </Field>
+      <Button
+        variant="primary"
+        disabled={!tour}
+        data-add-tour
+        onClick={() => {
+          if (!tour) return;
+          onAdd(tour, target === "new" ? "new" : Number(target), priceAs);
+          setTourId("");
+        }}
+      >
+        <Plus className="size-4" aria-hidden="true" /> إضافة الجولة
+      </Button>
+      {tour && priceAs !== "none" && (tour.currency !== quote.currency || !tour.price) ? (
+        <p className="text-xs font-bold text-accent-700 sm:col-span-3">
+          {!tour.price ? "لا يوجد سعر مسجل لهذه الجولة: سيُضاف وصفها فقط." : `عملة الجولة (${tour.currency}) تختلف عن عملة العرض (${quote.currency}): سيُضاف وصفها فقط، وأدخل سعرها يدوياً.`}
+        </p>
+      ) : null}
     </div>
   );
 }

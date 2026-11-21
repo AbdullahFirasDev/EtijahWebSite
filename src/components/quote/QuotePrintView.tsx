@@ -8,7 +8,7 @@ import { daysBetween, formatDay } from "@/lib/dates";
 import { mediaSrc } from "@/lib/media";
 import { formatMoney } from "@/lib/money";
 import type { QuoteView } from "@/server/repo/quotes";
-import { boardText, BrandMark, brandStyle, datesText, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
+import { boardText, BrandMark, brandStyle, datesText, DestinationsTable, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
 
 function H2({ children }: { children: ReactNode }) {
   return (
@@ -162,6 +162,15 @@ export function QuotePrintView({ q, token, onlineUrl, showToolbar }: { q: QuoteV
           <section className="px-page avoid">
             <H2>{t.overview}</H2>
             <p className="whitespace-pre-line text-ink/90">{q.intro}</p>
+          </section>
+        ) : null}
+
+        {q.destinations.length ? (
+          <section className="px-page avoid">
+            <H2>{t.destinations}</H2>
+            <div className="overflow-hidden rounded-[3mm] border border-line">
+              <DestinationsTable q={q} t={t} compact />
+            </div>
           </section>
         ) : null}
 

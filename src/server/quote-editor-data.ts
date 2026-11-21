@@ -1,12 +1,14 @@
 import "server-only";
 import { col } from "./db";
+import { destinationOptions } from "./editor-options";
 import { hotelPickerOptions } from "./repo/catalog";
 import { listCompanies, type CompanyHotelDoc } from "./repo/companies";
 import { getSettings } from "./repo/settings";
+import { listTours } from "./repo/tours";
 
-/** Option lists for the quote editor (companies with contacts and their hotel prices, programs, hotels). */
+/** Option lists for the quote editor (companies with contacts and their hotel prices, programs, hotels, places, tours). */
 export async function quoteEditorOptions() {
-  const [settings, companies, programs, hotels, access] = await Promise.all([
+  const [settings, companies, programs, hotels, access, geo, tours] = await Promise.all([
     getSettings(),
     listCompanies(),
     (await col<{ _id: number; title_ar: string; code: string; status: string; type: string; hotel_options: { id: string; hotel_id: number; room_ar: string | null }[] }>("programs"))
@@ -15,6 +17,9 @@ export async function quoteEditorOptions() {
       .toArray(),
     hotelPickerOptions({ includeCosts: true }),
     (await col<CompanyHotelDoc>("company_hotels")).find({}).toArray(),
+    destinationOptions({ activeOnly: true }),
+    // Quote editors (sales) see hotel costs too, so tour costs are shown the same way.
+    listTours({ activeOnly: true, includeCosts: true }),
   ]);
   const hotelName = new Map(hotels.map((h) => [h.id, h.name]));
   return {
@@ -34,6 +39,8 @@ export async function quoteEditorOptions() {
       options: (p.hotel_options ?? []).map((o) => ({ id: o.id, label: [hotelName.get(o.hotel_id), o.room_ar].filter(Boolean).join(" — ") })),
     })),
     hotels,
+    places: geo.destinations.map((d) => ({ country_code: d.country_code, name_ar: d.label, name_en: d.name_en })),
+    tours,
     currencies: settings.currencies as string[],
     settings,
   };

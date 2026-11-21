@@ -59,6 +59,39 @@ export function StarsInline({ n }: { n: number | null }) {
 
 export const boardText = (b: QuoteView["hotels"][number]["board"], locale: Locale) => (b ? BOARD_LABELS[b][locale] : "—");
 
+/** Countries / cities of the trip with their own entry and exit dates (web page and PDF). */
+export function DestinationsTable({ q, t, compact }: { q: QuoteView; t: QuoteDict; compact?: boolean }) {
+  const pad = compact ? "px-3 py-2" : "px-4 py-3";
+  return (
+    <table className="w-full border-collapse text-sm" data-quote-destinations>
+      <thead className="[display:table-header-group]">
+        <tr className="bg-brand-950 text-white">
+          <th className={`${pad} w-0 text-center font-bold`}>#</th>
+          <th className={`${pad} text-start font-bold`}>{t.place}</th>
+          <th className={`${pad} text-start font-bold`}>{t.entryDate}</th>
+          <th className={`${pad} text-start font-bold`}>{t.exitDate}</th>
+          <th className={`${pad} text-end font-bold`}>{t.duration}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {q.destinations.map((d, i) => (
+          <tr key={i} className="break-inside-avoid border-b border-line odd:bg-mist/60">
+            <td className={`${pad} num text-center text-muted`}>{i + 1}</td>
+            <td className={pad}>
+              <span className="font-bold text-brand-950">
+                {d.city ? `${d.city}${q.locale === "ar" ? "، " : ", "}${d.country}` : d.country}
+              </span>
+            </td>
+            <td className={`${pad} whitespace-nowrap`}>{d.entryDate ? formatDay(d.entryDate, q.locale) : "—"}</td>
+            <td className={`${pad} whitespace-nowrap`}>{d.exitDate ? formatDay(d.exitDate, q.locale) : "—"}</td>
+            <td className={`${pad} text-end whitespace-nowrap text-muted`}>{d.nights != null && d.nights > 0 ? t.nights(d.nights) : "—"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 /** Pricing table shared by the web page and the PDF (client prices only; never costs). */
 export function PricingTable({ q, t, compact }: { q: QuoteView; t: QuoteDict; compact?: boolean }) {
   const m = (v: number) => formatMoney(v, q.currency, q.locale);

@@ -9,7 +9,7 @@ import { daysBetween, formatDay, todayDay } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import type { QuoteView } from "@/server/repo/quotes";
 import { QuoteRespond, QuoteViewBeacon } from "./QuoteClient";
-import { boardText, BrandMark, brandStyle, datesText, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
+import { boardText, BrandMark, brandStyle, datesText, DestinationsTable, HotelLinks, HotelName, PricingTable, StarsInline, travelersText } from "./shared";
 
 export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; token: string; mode: "client" | "staff"; editorHref?: string }) {
   const t = quoteDict[q.locale];
@@ -120,6 +120,17 @@ export function QuoteWebView({ q, token, mode, editorHref }: { q: QuoteView; tok
                   {t.overview}
                 </h2>
                 <p className="mt-3 text-[1.02rem] leading-[2] whitespace-pre-line text-ink/90">{q.intro}</p>
+              </section>
+            ) : null}
+
+            {q.destinations.length ? (
+              <section aria-labelledby="q-destinations" className="overflow-hidden rounded-[1.5rem] bg-white ring-1 ring-brand-950/5">
+                <h2 id="q-destinations" className="px-6 pt-6 pb-4 text-xl font-extrabold text-brand-950 sm:px-8">
+                  {t.destinations}
+                </h2>
+                <div className="overflow-x-auto">
+                  <DestinationsTable q={q} t={t} />
+                </div>
               </section>
             ) : null}
 

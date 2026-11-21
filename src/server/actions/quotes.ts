@@ -34,7 +34,7 @@ import {
   setQuoteStatus,
 } from "../repo/quotes";
 import { audit, rateLimit, requestMeta } from "../security";
-import { currency, day, id, int, mediaId, money, optDay, optEmail, optText, reqText } from "../validation";
+import { country, currency, day, id, int, mediaId, money, optDay, optEmail, optText, reqText } from "../validation";
 import { companyAction, staffAction } from "./guard";
 
 const quoteSchema = z
@@ -50,7 +50,11 @@ const quoteSchema = z
     program_id: id.nullable(),
     locale: z.enum(["ar", "en"]),
     title: reqText(3, 160, "عنوان العرض"),
-    destination: optText(160),
+    destination: optText(300),
+    destinations: z
+      .array(z.object({ country_code: country, city: optText(120), entry_date: optDay, exit_date: optDay }))
+      .max(30)
+      .default([]),
     intro: optText(2000),
     start_date: optDay,
     end_date: optDay,
@@ -116,6 +120,7 @@ const quoteSchema = z
   .refine((q) => !q.start_date || !q.end_date || q.end_date >= q.start_date, { message: "تاريخ العودة قبل تاريخ السفر.", path: ["end_date"] })
   .refine((q) => q.discount_kind !== "percent" || q.discount_value <= 10000, { message: "نسبة الخصم لا تتجاوز 100%.", path: ["discount_value"] })
   .refine((q) => q.hotels.every((h) => !h.check_in || !h.check_out || h.check_out > h.check_in), { message: "تاريخ المغادرة من الفندق يجب أن يكون بعد تاريخ الوصول.", path: ["hotels"] })
+  .refine((q) => q.destinations.every((d) => !d.entry_date || !d.exit_date || d.exit_date >= d.entry_date), { message: "تاريخ الخروج من إحدى الوجهات قبل تاريخ الدخول إليها.", path: ["destinations"] })
   .refine((q) => q.audience === "traveler" || q.company_id, { message: "اختر الشركة المستلمة.", path: ["company_id"] })
   .refine((q) => q.audience === "company" || q.client, { message: "أدخل بيانات المسافر المستلم.", path: ["client"] });
 
@@ -190,6 +195,7 @@ export async function leadDraftForQuoteAction(leadId: number) {
       : [];
     const start = c?.date_from ?? l.preferred_date ?? null;
     const end = c?.date_to ?? null;
+    const codes = c?.country_codes ?? [];
     return ok({
       lead_id: l._id,
       program_id: l.program_id,
@@ -197,6 +203,7 @@ export async function leadDraftForQuoteAction(leadId: number) {
       client: { name: l.full_name, phone: l.phone, email: l.email },
       title: c ? `${l.locale === "en" ? "Tailor-made trip" : "برنامج خاص"} — ${c.country_codes.map((x) => countryName(x, l.locale)).join(l.locale === "en" ? ", " : "، ")}` : l.program_title,
       destination: c ? [c.country_codes.map((x) => countryName(x, l.locale)).join(" · "), c.places].filter(Boolean).join(" — ") : null,
+      destinations: codes.map((code, i) => ({ country_code: code, city: null, entry_date: i === 0 ? start : null, exit_date: i === codes.length - 1 ? end : null })),
       start_date: start,
       end_date: end,
       adults: l.adults,
@@ -219,6 +226,7 @@ export async function b2bRequestDraftAction(requestId: number) {
       company_id: r.company_id,
       title: r.title,
       destination: [r.country_codes.map((x) => countryName(x, "ar")).join(" · "), r.places].filter(Boolean).join(" — ") || null,
+      destinations: r.country_codes.map((code, i) => ({ country_code: code, city: null, entry_date: i === 0 ? r.date_from : null, exit_date: i === r.country_codes.length - 1 ? r.date_to : null })),
       start_date: r.date_from,
       end_date: r.date_to,
       adults: r.adults,

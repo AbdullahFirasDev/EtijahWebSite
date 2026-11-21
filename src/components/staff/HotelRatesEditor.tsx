@@ -5,7 +5,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/money";
 import { BOARD_LABELS, BOARDS, RATE_BASIS_LABELS, type Board } from "@/lib/travel-labels";
 import { saveHotelRatesAction } from "@/server/actions/catalog";
-import { MoneyInput, NumberInput } from "./fields";
+import { DateInput, MoneyInput, NumberInput } from "./fields";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, Select } from "./ui";
 import { useActionRunner } from "./useActionRunner";
 
@@ -170,8 +170,8 @@ export function HotelRatesEditor({
                     <td className="min-w-56">
                       <Input aria-label="الموسم" value={r.season_ar ?? ""} disabled={!canEdit} onChange={(e) => setRow(r.key, { season_ar: e.target.value || null })} placeholder="مثال: صيف 2027" className="h-9 text-xs" />
                       <div className="mt-1 flex gap-1" dir="ltr">
-                        <Input type="date" aria-label="من" value={r.valid_from ?? ""} disabled={!canEdit} onChange={(e) => setRow(r.key, { valid_from: e.target.value || null })} className="num h-9 px-2 text-xs" />
-                        <Input type="date" aria-label="إلى" value={r.valid_to ?? ""} disabled={!canEdit} onChange={(e) => setRow(r.key, { valid_to: e.target.value || null })} className="num h-9 px-2 text-xs" />
+                        <DateInput aria-label="من" value={r.valid_from} disabled={!canEdit} onChange={(v) => setRow(r.key, { valid_from: v })} className="w-36" inputClassName="h-9 px-2 text-xs" />
+                        <DateInput aria-label="إلى" min={r.valid_from ?? undefined} value={r.valid_to} disabled={!canEdit} onChange={(v) => setRow(r.key, { valid_to: v })} className="w-36" inputClassName="h-9 px-2 text-xs" />
                       </div>
                     </td>
                     <td>

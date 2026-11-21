@@ -1,6 +1,7 @@
 import { FileDown, FileSpreadsheet } from "lucide-react";
 import { CommissionReportView } from "@/components/staff/CommissionReportView";
-import { Card, Input, PageHeader, Select } from "@/components/staff/ui";
+import { DateInput } from "@/components/staff/fields";
+import { Card, PageHeader, Select } from "@/components/staff/ui";
 import { asset } from "@/lib/asset";
 import { requireStaffPage } from "@/server/auth/session";
 import { airlineOptions } from "@/server/repo/airlines";
@@ -52,10 +53,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
             ))}
           </Select>
           <label className="flex items-center gap-2 text-xs font-bold text-muted">
-            من <Input type="date" name="from" dir="ltr" defaultValue={sp.from} className="num" />
+            من <DateInput name="from" defaultValue={sp.from ?? null} aria-label="من" className="w-40" />
           </label>
           <label className="flex items-center gap-2 text-xs font-bold text-muted">
-            إلى <Input type="date" name="to" dir="ltr" defaultValue={sp.to} className="num" />
+            إلى <DateInput name="to" defaultValue={sp.to ?? null} aria-label="إلى" className="w-40" />
           </label>
           <button className="h-11 rounded-xl bg-brand-50 px-4 text-sm font-bold text-brand-700 hover:bg-brand-100">عرض التقرير</button>
         </form>

@@ -26,6 +26,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
     locale: "ar",
     title: "",
     destination: null,
+    destinations: [],
     intro: null,
     start_date: null,
     end_date: null,
@@ -89,6 +90,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         b2b_request_id: d.data.b2b_request_id,
         title: d.data.title,
         destination: d.data.destination,
+        destinations: d.data.destinations,
         start_date: d.data.start_date,
         end_date: d.data.end_date,
         adults: d.data.adults,
@@ -125,6 +127,8 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         companies={o.companies}
         programs={o.programs}
         hotels={o.hotels}
+        places={o.places}
+        tours={o.tours}
         currencies={o.currencies}
         defaultTerms={{ ar: o.settings.quote_terms_ar, en: o.settings.quote_terms_en }}
         canDelete={can(staff.role, "b2b.delete")}
