@@ -30,20 +30,31 @@ function Section({ id, title, children, className = "" }: { id: string; title: s
 const ctaPrimary =
   "inline-flex h-14 w-full items-center justify-center gap-2.5 rounded-full bg-accent-500 px-7 text-[1.05rem] font-bold text-brand-950 transition-[background-color,box-shadow,transform] duration-300 hover:bg-accent-400 hover:shadow-glow active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Side-by-side hotel options of one program: same trip, different hotel, clear total per person. */
+/** Side-by-side hotel options of one program: same trip, different hotel, clear total per person.
+ *  A hotel with several room types shows once, with one priced row per room type. */
 function HotelChoices({ choices, locale, currency, custom, disabled }: { choices: HotelChoice[]; locale: Locale; currency: string; custom: boolean; disabled?: boolean }) {
   const d = travel[locale].detail;
   const money = (n: number) => formatMoney(n, currency, locale);
   const cheapest = custom ? null : choices.reduce<HotelChoice | null>((m, c) => (c.pricePerPerson != null && (!m || c.pricePerPerson < (m.pricePerPerson ?? Infinity)) ? c : m), null);
+  const groups: { hotel: HotelChoice["hotel"]; rooms: HotelChoice[] }[] = [];
+  for (const c of choices) {
+    const g = groups.find((x) => x.hotel.id === c.hotel.id);
+    if (g) g.rooms.push(c);
+    else groups.push({ hotel: c.hotel, rooms: [c] });
+  }
+  const showCheapest = choices.length > 1;
+  const buttonClass = "inline-flex h-11 w-full items-center justify-center rounded-full border-2 border-brand-600 px-5 text-sm font-bold text-brand-700 transition-colors hover:bg-brand-600 hover:text-white disabled:opacity-50";
   return (
-    <ul role="list" className={`grid gap-5 ${choices.length > 1 ? "md:grid-cols-2" : ""} ${choices.length > 2 ? "xl:grid-cols-3" : ""}`} data-hotel-choices>
-      {choices.map((c) => {
-        const link = c.hotel.websiteUrl || c.hotel.mapsUrl;
+    <ul role="list" className={`grid gap-5 ${groups.length > 1 ? "md:grid-cols-2" : ""} ${groups.length > 2 ? "xl:grid-cols-3" : ""}`} data-hotel-choices>
+      {groups.map(({ hotel, rooms }) => {
+        const link = hotel.websiteUrl || hotel.mapsUrl;
+        const hasCheapest = showCheapest && rooms.some((r) => r.id === cheapest?.id);
+        const single = rooms.length === 1 ? rooms[0] : null;
         return (
-          <li key={c.id} data-reveal className={`relative flex flex-col overflow-hidden rounded-[1.5rem] bg-white ring-1 ${cheapest?.id === c.id && choices.length > 1 ? "ring-2 ring-accent-500" : "ring-brand-950/5"}`} data-hotel-choice={c.id}>
-            {cheapest?.id === c.id && choices.length > 1 ? <span className="absolute top-3 start-3 z-10 rounded-full bg-accent-500 px-3 py-1 text-xs font-extrabold text-brand-950">{d.cheapest}</span> : null}
+          <li key={hotel.id} data-reveal className={`relative flex flex-col overflow-hidden rounded-[1.5rem] bg-white ring-1 ${hasCheapest ? "ring-2 ring-accent-500" : "ring-brand-950/5"}`} data-hotel-choice={single?.id ?? hotel.id}>
+            {hasCheapest && single ? <span className="absolute top-3 start-3 z-10 rounded-full bg-accent-500 px-3 py-1 text-xs font-extrabold text-brand-950">{d.cheapest}</span> : null}
             <div className="aspect-[16/10] bg-brand-100">
-              {c.hotel.images[0] ? <MediaImage media={c.hotel.images[0]} alt={c.hotel.name} sizes="(min-width: 1024px) 24rem, 92vw" className="h-full w-full object-cover" /> : (
+              {hotel.images[0] ? <MediaImage media={hotel.images[0]} alt={hotel.name} sizes="(min-width: 1024px) 24rem, 92vw" className="h-full w-full object-cover" /> : (
                 <div className="grid h-full place-items-center text-brand-300"><BedDouble className="size-10" aria-hidden="true" /></div>
               )}
             </div>
@@ -53,72 +64,124 @@ function HotelChoices({ choices, locale, currency, custom, disabled }: { choices
                   <h3 className="text-lg font-extrabold text-brand-950">
                     {link ? (
                       <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-brand-600 hover:underline">
-                        {c.hotel.name} <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+                        {hotel.name} <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
                       </a>
                     ) : (
-                      c.hotel.name
+                      hotel.name
                     )}
                   </h3>
                   <p className="text-sm text-muted">
-                    {c.hotel.city}، {c.hotel.country}
+                    {hotel.city}، {hotel.country}
                   </p>
                 </div>
-                {c.hotel.stars ? (
-                  <span className="inline-flex shrink-0 text-accent-500" aria-label={d.stars(c.hotel.stars)}>
-                    {Array.from({ length: c.hotel.stars }, (_, i) => (
+                {hotel.stars ? (
+                  <span className="inline-flex shrink-0 text-accent-500" aria-label={d.stars(hotel.stars)}>
+                    {Array.from({ length: hotel.stars }, (_, i) => (
                       <Star key={i} className="size-4 fill-current" aria-hidden="true" />
                     ))}
                   </span>
                 ) : null}
               </div>
-              <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-                {c.room ? (
-                  <div className="col-span-2">
-                    <dt className="text-xs font-bold text-muted">{d.room}</dt>
-                    <dd className="font-bold text-brand-950">{c.room}</dd>
+              {single ? (
+                <>
+                  <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                    {single.room ? (
+                      <div className="col-span-2">
+                        <dt className="text-xs font-bold text-muted">{d.room}</dt>
+                        <dd className="font-bold text-brand-950">{single.room}</dd>
+                      </div>
+                    ) : null}
+                    <div>
+                      <dt className="text-xs font-bold text-muted">{d.roomFor}</dt>
+                      <dd className="font-bold text-brand-950">{d.persons(single.occupancy)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-bold text-muted">{d.board}</dt>
+                      <dd className="font-bold text-brand-950">{single.board ? BOARD_LABELS[single.board][locale] : "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-bold text-muted">{travel[locale].request.nights}</dt>
+                      <dd className="font-bold text-brand-950">{d.nightsAt(single.nights)}</dd>
+                    </div>
+                    {single.nightPrice != null ? (
+                      <div>
+                        <dt className="text-xs font-bold text-muted">{d.nightPrice}</dt>
+                        <dd className="num font-bold text-brand-950">
+                          {money(single.nightPrice)} <span className="text-xs font-semibold text-muted">{RATE_BASIS_LABELS[single.basis][locale]}</span>
+                        </dd>
+                      </div>
+                    ) : null}
+                    {single.hotelPerPerson != null ? (
+                      <div className="col-span-2">
+                        <dt className="text-xs font-bold text-muted">{d.stay}</dt>
+                        <dd className="num font-bold text-brand-950">{money(single.hotelPerPerson)}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  {single.note ? <p className="mt-3 text-sm text-muted">{single.note}</p> : null}
+                  <div className="mt-auto pt-5">
+                    {single.pricePerPerson != null ? (
+                      <div className="mb-3 rounded-2xl bg-brand-50 px-4 py-3">
+                        <p className="text-xs font-bold text-muted">{d.totalPerPerson}</p>
+                        <p className="num text-2xl font-black text-brand-700" data-option-price>
+                          {money(single.pricePerPerson)}
+                        </p>
+                      </div>
+                    ) : null}
+                    <RequestButton hotelOptionId={custom ? undefined : single.id} disabled={disabled} className={buttonClass}>
+                      {custom ? d.customCta : d.chooseHotel}
+                    </RequestButton>
                   </div>
-                ) : null}
-                <div>
-                  <dt className="text-xs font-bold text-muted">{d.roomFor}</dt>
-                  <dd className="font-bold text-brand-950">{d.persons(c.occupancy)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold text-muted">{d.board}</dt>
-                  <dd className="font-bold text-brand-950">{c.board ? BOARD_LABELS[c.board][locale] : "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-bold text-muted">{travel[locale].request.nights}</dt>
-                  <dd className="font-bold text-brand-950">{d.nightsAt(c.nights)}</dd>
-                </div>
-                {c.nightPrice != null ? (
-                  <div>
-                    <dt className="text-xs font-bold text-muted">{d.nightPrice}</dt>
-                    <dd className="num font-bold text-brand-950">
-                      {money(c.nightPrice)} <span className="text-xs font-semibold text-muted">{RATE_BASIS_LABELS[c.basis][locale]}</span>
-                    </dd>
-                  </div>
-                ) : null}
-                {c.hotelPerPerson != null ? (
-                  <div className="col-span-2">
-                    <dt className="text-xs font-bold text-muted">{d.stay}</dt>
-                    <dd className="num font-bold text-brand-950">{money(c.hotelPerPerson)}</dd>
-                  </div>
-                ) : null}
-              </dl>
-              {c.note ? <p className="mt-3 text-sm text-muted">{c.note}</p> : null}
-              <div className="mt-auto pt-5">
-                {c.pricePerPerson != null ? (
-                  <div className="mb-3 rounded-2xl bg-brand-50 px-4 py-3">
-                    <p className="text-xs font-bold text-muted">{d.totalPerPerson}</p>
-                    <p className="num text-2xl font-black text-brand-700" data-option-price>
-                      {money(c.pricePerPerson)}
-                    </p>
-                  </div>
-                ) : null}
-                <RequestButton hotelOptionId={custom ? undefined : c.id} disabled={disabled} className="inline-flex h-11 w-full items-center justify-center rounded-full border-2 border-brand-600 px-5 text-sm font-bold text-brand-700 transition-colors hover:bg-brand-600 hover:text-white disabled:opacity-50">
-                  {custom ? d.customCta : d.chooseHotel}
-                </RequestButton>
-              </div>
+                </>
+              ) : (
+                <>
+                  <p className="mt-4 text-xs font-bold text-muted">{d.roomTypes(rooms.length)}</p>
+                  <ul role="list" className="mt-2 grid gap-2.5" data-room-choices>
+                    {rooms.map((r) => (
+                      <li key={r.id} className={`rounded-2xl px-4 py-3 ring-1 ${showCheapest && cheapest?.id === r.id ? "bg-accent-50 ring-accent-500" : "bg-mist ring-brand-950/5"}`} data-room-choice={r.id}>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-extrabold text-brand-950">
+                              {r.room ?? d.room}
+                              {showCheapest && cheapest?.id === r.id ? <span className="ms-2 rounded-full bg-accent-500 px-2 py-0.5 align-middle text-[0.7rem] font-extrabold text-brand-950">{d.cheapest}</span> : null}
+                            </p>
+                            <p className="text-xs text-muted">
+                              {d.persons(r.occupancy)} · {r.board ? BOARD_LABELS[r.board][locale] : "—"} · {d.nightsAt(r.nights)}
+                              {r.nightPrice != null ? (
+                                <>
+                                  {" · "}
+                                  <span className="num">{money(r.nightPrice)}</span> {RATE_BASIS_LABELS[r.basis][locale]}
+                                </>
+                              ) : null}
+                            </p>
+                            {r.note ? <p className="mt-1 text-xs text-muted">{r.note}</p> : null}
+                          </div>
+                          {r.pricePerPerson != null ? (
+                            <div className="text-end">
+                              <p className="text-[0.7rem] font-bold text-muted">{d.totalPerPerson}</p>
+                              <p className="num text-xl font-black text-brand-700" data-option-price>
+                                {money(r.pricePerPerson)}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                        {!custom ? (
+                          <RequestButton hotelOptionId={r.id} disabled={disabled} className="mt-2.5 inline-flex h-9 w-full items-center justify-center rounded-full border-2 border-brand-600 px-4 text-xs font-bold text-brand-700 transition-colors hover:bg-brand-600 hover:text-white disabled:opacity-50">
+                            {d.chooseRoom}
+                          </RequestButton>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  {custom ? (
+                    <div className="mt-auto pt-5">
+                      <RequestButton disabled={disabled} className={buttonClass}>
+                        {d.customCta}
+                      </RequestButton>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
           </li>
         );

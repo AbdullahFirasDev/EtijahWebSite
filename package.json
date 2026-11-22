@@ -23,6 +23,7 @@
     "assets": "npm run images && npm run globe && npm run icons && npm run partners",
     "og": "node scripts/build-og.mjs",
     "test:tours": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning scripts/test-tours-destinations.mjs",
+    "test:rooms": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning scripts/test-room-types.mjs",
     "test:geo": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning scripts/test-geo.mjs"
   },
   "dependencies": {

@@ -137,11 +137,15 @@ export function ProgramPrintView({ p, locale, url }: { p: ProgramDetail; locale:
                 </tr>
               </thead>
               <tbody>
-                {p.hotelChoices.map((h) => {
+                {[...new Set(p.hotelChoices.map((h) => h.hotel.id))].flatMap((hid) => {
+                  const rooms = p.hotelChoices.filter((h) => h.hotel.id === hid);
+                  return rooms.map((h, ri) => ({ h, span: ri === 0 ? rooms.length : 0 }));
+                }).map(({ h, span }) => {
                   const link = h.hotel.websiteUrl || h.hotel.mapsUrl;
                   return (
                     <tr key={h.id}>
-                      <td>
+                      {span ? (
+                      <td rowSpan={span}>
                         {link ? (
                           <a href={link} className="inline-flex items-center gap-1 font-extrabold text-brand-800 underline">
                             {h.hotel.name} <ExternalLink className="size-[3mm]" aria-hidden="true" />
@@ -154,6 +158,7 @@ export function ProgramPrintView({ p, locale, url }: { p: ProgramDetail; locale:
                           {h.hotel.city}
                         </span>
                       </td>
+                      ) : null}
                       <td>
                         {h.room ?? "—"}
                         <span className="block text-muted">

@@ -105,7 +105,7 @@ const programSchema = z
     gallery: z.array(mediaId).max(30),
     base_price: money,
     base_cost: money.nullable(),
-    hotel_options: z.array(optionSchema).max(20),
+    hotel_options: z.array(optionSchema).max(40),
     extra_prices: z.array(z.object({ label_ar: reqText(2, 120, "وصف السعر"), label_en: optText(120), amount: money.refine((v) => v > 0, { message: "السعر يجب أن يكون أكبر من صفر." }) })).max(16),
     price_note_ar: optText(120),
     price_note_en: optText(120),

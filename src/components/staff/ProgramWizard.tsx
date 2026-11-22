@@ -486,44 +486,82 @@ export function ProgramWizard({
   };
 
   // ---------------------------------------------------------------- Hotel picker
+  type CatalogHotel = CatalogOptions["hotels"][number];
+  const makeOption = (h: CatalogHotel, rate: CatalogHotel["rates"][number] | null, room: CatalogHotel["room_types"][number] | undefined, base?: OptionForm): OptionForm => {
+    const sameCurrency = !rate || rate.currency === currency;
+    return {
+      key: newKey(),
+      v: 0,
+      id: null,
+      hotel_id: h.id,
+      room_type_id: room?.id ?? null,
+      room_ar: room?.name_ar ?? null,
+      room_en: room?.name_en ?? null,
+      occupancy: rate?.occupancy ?? Math.min(2, room?.max_pax ?? 2),
+      board: rate?.board ?? base?.board ?? "BB",
+      nights: base?.nights ?? Math.max(1, f.duration_nights || 1),
+      basis: rate?.basis ?? base?.basis ?? "per_room",
+      night_price: rate && sameCurrency ? rate.price : null,
+      night_cost: rate && sameCurrency ? rate.cost : null,
+      source: rate ? "library" : "custom",
+      rate_id: rate?.id ?? null,
+      refresh_rate: false,
+      snapshot: rate ? { currency: rate.currency, price: rate.price, cost: rate.cost, captured_at: new Date().toISOString() } : null,
+      fx_rate: base?.fx_rate ?? null,
+      final_price_override: null,
+      note_ar: null,
+      note_en: null,
+    };
+  };
+  /** Inserts an option right after the hotel's other room types, so a hotel's rooms stay together. */
+  const insertOption = (opt: OptionForm) =>
+    setF((x) => {
+      const last = x.options.map((o) => o.hotel_id).lastIndexOf(opt.hotel_id);
+      const options = [...x.options];
+      options.splice(last === -1 ? options.length : last + 1, 0, opt);
+      return { ...x, options };
+    });
+
   const addOption = (hotelId: number, rateId: string | null) => {
     const h = hotelById.get(hotelId);
     if (!h) return;
-    const rate = rateId ? h.rates.find((r) => r.id === rateId) : null;
+    const rate = rateId ? (h.rates.find((r) => r.id === rateId) ?? null) : null;
     const room = rate ? h.room_types.find((r) => r.id === rate.room_type_id) : h.room_types[0];
-    const sameCurrency = !rate || rate.currency === currency;
-    const nights = Math.max(1, f.duration_nights || 1);
-    setF((x) => ({
-      ...x,
-      options: [
-        ...x.options,
-        {
-          key: newKey(),
-          v: 0,
-          id: null,
-          hotel_id: h.id,
-          room_type_id: room?.id ?? null,
-          room_ar: room?.name_ar ?? null,
-          room_en: room?.name_en ?? null,
-          occupancy: rate?.occupancy ?? Math.min(2, room?.max_pax ?? 2),
-          board: rate?.board ?? "BB",
-          nights,
-          basis: rate?.basis ?? "per_room",
-          night_price: rate && sameCurrency ? rate.price : null,
-          night_cost: rate && sameCurrency ? rate.cost : null,
-          source: rate ? "library" : "custom",
-          rate_id: rate?.id ?? null,
-          refresh_rate: false,
-          snapshot: rate ? { currency: rate.currency, price: rate.price, cost: rate.cost, captured_at: new Date().toISOString() } : null,
-          fx_rate: null,
-          final_price_override: null,
-          note_ar: null,
-          note_en: null,
-        },
-      ],
-    }));
+    const had = f.options.some((o) => o.hotel_id === h.id);
+    insertOption(makeOption(h, rate, room));
     setDirty(true);
-    toast.success(`أُضيف «${h.name}» إلى البرنامج.`);
+    toast.success(had ? `أُضيف نوع غرفة إلى «${h.name}».` : `أُضيف «${h.name}» إلى البرنامج.`);
+  };
+
+  /** Another room type for a hotel already in the program: the next library room/rate not used yet. */
+  const addRoomType = (hotelId: number) => {
+    const h = hotelById.get(hotelId);
+    if (!h) return;
+    const mine = f.options.filter((o) => o.hotel_id === hotelId);
+    const usedRooms = new Set(mine.map((o) => o.room_type_id).filter(Boolean));
+    const usedRates = new Set(mine.map((o) => o.rate_id).filter(Boolean));
+    const rate = h.rates.find((r) => !usedRooms.has(r.room_type_id)) ?? h.rates.find((r) => !usedRates.has(r.id)) ?? null;
+    const room = rate ? h.room_types.find((r) => r.id === rate.room_type_id) : h.room_types.find((r) => !usedRooms.has(r.id));
+    insertOption(makeOption(h, rate, room, mine.at(-1)));
+    setDirty(true);
+  };
+
+  /** The program's options grouped by hotel (first appearance order). */
+  const hotelGroups = (() => {
+    const groups: { hotel_id: number; rooms: OptionForm[] }[] = [];
+    for (const o of f.options) {
+      const g = groups.find((x) => x.hotel_id === o.hotel_id);
+      if (g) g.rooms.push(o);
+      else groups.push({ hotel_id: o.hotel_id, rooms: [o] });
+    }
+    return groups;
+  })();
+  const moveHotel = (gi: number, dir: -1 | 1) => {
+    const order = hotelGroups.map((g) => g.hotel_id);
+    const j = gi + dir;
+    if (j < 0 || j >= order.length) return;
+    [order[gi], order[j]] = [order[j], order[gi]];
+    set("options", order.flatMap((id) => f.options.filter((o) => o.hotel_id === id)));
   };
 
   /** Re-copies the current library price into an option (only when staff ask for it). */
@@ -781,12 +819,13 @@ export function ProgramWizard({
       }
     >
       <PricingLocked locked={!rights.pricing}>
-        {f.options.length ? (
+        {hotelGroups.length ? (
           <ul role="list" className="grid gap-3">
-            {f.options.map((o, i) => {
-              const h = hotelById.get(o.hotel_id);
+            {hotelGroups.map((g, i) => {
+              const h = hotelById.get(g.hotel_id);
+              const o = g.rooms[0];
               return (
-                <li key={o.key} className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-3" data-option-row>
+                <li key={g.hotel_id} className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-3" data-option-row>
                   <span className="grid size-11 place-items-center rounded-xl bg-brand-50 text-brand-600">
                     <BedDouble className="size-5" aria-hidden="true" />
                   </span>
@@ -802,17 +841,17 @@ export function ProgramWizard({
                       ) : null}
                     </p>
                     <p className="text-xs text-muted">
-                      {h?.city} · {o.room_ar ?? "—"} · {o.source === "library" ? "سعر من المكتبة" : "سعر خاص بهذا البرنامج"}
+                      {h?.city} · {g.rooms.length > 1 ? `${g.rooms.length} أنواع غرف: ${g.rooms.map((r) => r.room_ar ?? "—").join("، ")}` : `${o.room_ar ?? "—"} · ${o.source === "library" ? "سعر من المكتبة" : "سعر خاص بهذا البرنامج"}`}
                     </p>
                   </div>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" aria-label="تقديم" disabled={i === 0} onClick={() => set("options", move(f.options, i, -1))}>
+                    <Button size="sm" variant="ghost" aria-label="تقديم" disabled={i === 0} onClick={() => moveHotel(i, -1)}>
                       <ArrowUp className="size-4" aria-hidden="true" />
                     </Button>
-                    <Button size="sm" variant="ghost" aria-label="تأخير" disabled={i === f.options.length - 1} onClick={() => set("options", move(f.options, i, 1))}>
+                    <Button size="sm" variant="ghost" aria-label="تأخير" disabled={i === hotelGroups.length - 1} onClick={() => moveHotel(i, 1)}>
                       <ArrowDown className="size-4" aria-hidden="true" />
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-danger" aria-label="حذف الخيار" onClick={() => set("options", f.options.filter((x) => x.key !== o.key))}>
+                    <Button size="sm" variant="ghost" className="text-danger" aria-label="حذف الفندق" onClick={() => set("options", f.options.filter((x) => x.hotel_id !== g.hotel_id))}>
                       <Trash2 className="size-4" aria-hidden="true" />
                     </Button>
                   </div>
@@ -839,18 +878,48 @@ export function ProgramWizard({
             ))}
           </Select>
         </Field>
-        {f.options.length ? (
+        {hotelGroups.length ? (
           <ul role="list" className="grid gap-4">
-            {f.options.map((o) => {
-              const h = hotelById.get(o.hotel_id);
+            {hotelGroups.map((g) => {
+              const h = hotelById.get(g.hotel_id);
+              return (
+                <li key={g.hotel_id} className="rounded-2xl border border-line p-4" data-hotel-rooms={g.hotel_id}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-extrabold text-brand-950">
+                      {h?.name} <span className="text-xs font-bold text-muted">· {g.rooms.length === 1 ? "نوع غرفة واحد" : `${g.rooms.length} أنواع غرف`}</span>
+                    </p>
+                    <Button size="sm" variant="subtle" data-add-room onClick={() => addRoomType(g.hotel_id)}>
+                      <Plus className="size-4" aria-hidden="true" /> إضافة نوع غرفة
+                    </Button>
+                  </div>
+                  {h?.room_types.length ? (
+                    <datalist id={`rooms-${g.hotel_id}`}>
+                      {h.room_types.map((rt) => (
+                        <option key={rt.id} value={rt.name_ar} />
+                      ))}
+                    </datalist>
+                  ) : null}
+                  <ul role="list" className="mt-3 grid gap-3">
+            {g.rooms.map((o, ri) => {
               const libRate = o.rate_id ? h?.rates.find((r) => r.id === o.rate_id) : null;
               const libChanged = libRate && o.snapshot && (libRate.price !== o.snapshot.price || libRate.currency !== o.snapshot.currency);
               const foreign = o.source === "library" && o.snapshot && o.snapshot.currency !== currency;
               const pp = hotelPerPerson({ ...optionPricing(o) });
               return (
-                <li key={o.key} className="rounded-2xl border border-line p-4" data-room-pricing>
+                <li key={o.key} className="rounded-xl bg-mist p-3 ring-1 ring-line" data-room-pricing>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-extrabold text-brand-950">{h?.name}</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm font-bold text-brand-900">
+                        <BedDouble className="me-1 inline size-4 align-[-3px] text-brand-600" aria-hidden="true" />
+                        نوع الغرفة {ri + 1}
+                        {o.room_ar ? `: ${o.room_ar}` : ""}
+                      </p>
+                      {g.rooms.length > 1 ? (
+                        <Button size="sm" variant="ghost" className="h-8 text-danger" aria-label="حذف نوع الغرفة" data-remove-room onClick={() => set("options", f.options.filter((x) => x.key !== o.key))}>
+                          <Trash2 className="size-4" aria-hidden="true" />
+                        </Button>
+                      ) : null}
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Select
                         aria-label="مصدر السعر"
@@ -931,11 +1000,20 @@ export function ProgramWizard({
                       />
                     </div>
                   ) : null}
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_6rem_6rem_8rem_9rem_9rem]">
-                    <Field label="نوع الغرفة">
-                      <Input value={o.room_ar ?? ""} onChange={(e) => setOption(o.key, { room_ar: e.target.value || null })} />
+                  <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-6">
+                    <Field label="نوع الغرفة" className="col-span-2">
+                      <Input
+                        value={o.room_ar ?? ""}
+                        list={h?.room_types.length ? `rooms-${g.hotel_id}` : undefined}
+                        data-room-name
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const rt = h?.room_types.find((x) => x.name_ar === v);
+                          setOption(o.key, rt ? { room_ar: rt.name_ar, room_en: rt.name_en, room_type_id: rt.id } : { room_ar: v || null });
+                        }}
+                      />
                     </Field>
-                    <Field label="الوجبات">
+                    <Field label="الوجبات" className="md:col-span-2">
                       <Select value={o.board ?? ""} onChange={(e) => setOption(o.key, { board: (e.target.value || null) as Board | null })}>
                         <option value="">—</option>
                         {BOARDS.map((b) => (
@@ -951,17 +1029,17 @@ export function ProgramWizard({
                     <Field label="الليالي">
                       <NumberInput min={1} max={90} value={o.nights} onChange={(v) => setOption(o.key, { nights: v ?? 1 })} aria-label="عدد الليالي" />
                     </Field>
-                    <Field label="نوع السعر">
+                    <Field label="نوع السعر" className="md:col-span-2">
                       <Select value={o.basis} onChange={(e) => setOption(o.key, { basis: e.target.value as OptionForm["basis"] })}>
                         <option value="per_room">للغرفة</option>
                         <option value="per_person">للشخص</option>
                       </Select>
                     </Field>
-                    <Field label={`سعر الليلة (${currency})`}>
+                    <Field label={`سعر الليلة (${currency})`} className="md:col-span-2">
                       <MoneyInput key={`p-${o.key}-${o.v}`} value={o.night_price} onChange={(v) => setOption(o.key, { night_price: v })} aria-label="سعر الليلة" />
                     </Field>
                     {rights.costs ? (
-                      <Field label="التكلفة لليلة (داخلي)">
+                      <Field label="التكلفة لليلة (داخلي)" className="md:col-span-2">
                         <MoneyInput key={`c-${o.key}-${o.v}`} value={o.night_cost} onChange={(v) => setOption(o.key, { night_cost: v })} aria-label="التكلفة لليلة" />
                       </Field>
                     ) : null}
@@ -970,6 +1048,10 @@ export function ProgramWizard({
                     الإقامة للشخص: <span className="num font-black text-brand-700">{money(pp)}</span>
                     <span className="text-muted"> ({o.basis === "per_room" ? `${money(o.night_price)} × ${o.nights} ليالٍ ÷ ${o.occupancy} أشخاص` : `${money(o.night_price)} × ${o.nights} ليالٍ`})</span>
                   </p>
+                </li>
+              );
+            })}
+                  </ul>
                 </li>
               );
             })}
